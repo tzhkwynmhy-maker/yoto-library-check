@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Library Check">
+<meta name="theme-color" content="#fff4e0">
+<title>Yoto Library Check</title>
+<style>
+  :root {
+    --bg: #fff4e0; --ink: #2b2340; --soft: #6d6486; --accent: #ff6f59; --accent-dark: #e4553f;
+    --card: #ffffff; --pill: #ffe3c2; --line: #f3d3a8; --good: #2e7d32;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: ui-rounded, "Avenir Next Rounded", "Nunito", system-ui, -apple-system, sans-serif;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button { border: 0; cursor: pointer; }
+  img { -webkit-user-drag: none; }
+
+  .primary {
+    background: var(--accent); color: #fff; font-size: 1.2rem; font-weight: 700;
+    padding: 14px 32px; border-radius: 999px; box-shadow: 0 5px 0 var(--accent-dark);
+  }
+  .primary:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--accent-dark); }
+  .btn { background: var(--pill); font-weight: 700; padding: 10px 18px; border-radius: 999px; }
+  .btn:active { transform: translateY(1px); }
+  .btn.danger { background: #ffd6d2; }
+  .err { color: #b3261e; font-weight: 600; }
+
+  #login {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 32px 24px; gap: 16px;
+  }
+  #login h1 { margin: 0; font-size: 2rem; }
+  #login p { max-width: 34rem; margin: 0; color: var(--soft); line-height: 1.5; }
+  #login code {
+    display: inline-block; background: #fff; padding: 4px 8px; border-radius: 8px; font-size: .85rem;
+    word-break: break-all; color: var(--ink); user-select: text; -webkit-user-select: text;
+  }
+
+  #app { max-width: 900px; margin: 0 auto; padding: max(env(safe-area-inset-top), 14px) 14px 40px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 2px 10px; }
+  header h1 { margin: 0; font-size: 1.6rem; }
+  #stats { margin: 0 2px 12px; color: var(--soft); font-weight: 600; line-height: 1.4; }
+  .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  #search, #sortSel, #since {
+    font-size: 1rem; padding: 10px 16px; border-radius: 999px; border: 2px solid var(--line);
+    background: #fff; outline: none; min-width: 0; -webkit-appearance: none; appearance: none;
+  }
+  #search { flex: 1 1 100%; }
+  #search:focus, #since:focus { border-color: var(--accent); }
+  #since { padding: 8px 14px; }
+  .lbl { font-weight: 700; color: var(--soft); font-size: .95rem; }
+  .chip { background: var(--pill); font-weight: 700; padding: 9px 18px; border-radius: 999px; }
+  .chip.on { background: var(--accent); color: #fff; box-shadow: 0 3px 0 var(--accent-dark); }
+
+  #list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .item {
+    display: flex; align-items: center; gap: 12px; background: var(--card); border-radius: 16px;
+    padding: 8px 14px 8px 8px; box-shadow: 0 2px 8px rgba(60, 40, 90, .08);
+  }
+  .art { width: 44px; aspect-ratio: 2 / 3; border-radius: 8px; overflow: hidden; background: var(--pill); flex: none; }
+  .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: 800; color: rgba(43,35,64,.55); }
+  .txt { flex: 1; min-width: 0; }
+  .t { font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+  .m { color: var(--soft); font-size: .88rem; margin-top: 2px; }
+  .m b { color: var(--ink); }
+  .tag { flex: none; font-size: .7rem; font-weight: 800; letter-spacing: .4px; padding: 3px 8px; border-radius: 999px; background: var(--pill); color: var(--soft); }
+  .tag.club { background: #d9ecff; color: #1f5fa8; }
+  #msg { padding: 12px 4px; color: var(--soft); font-weight: 600; }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 20px; border-radius: 999px; font-weight: 700; z-index: 40; }
+
+  #tech { position: fixed; inset: 0; background: rgba(30,20,50,.55); z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #tech .box { background: #fff; border-radius: 22px; padding: 20px; width: 100%; max-width: 640px; max-height: 92vh; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+  #tech h2 { margin: 0; }
+  #tech p { margin: 0; color: var(--soft); line-height: 1.45; }
+  #dbg { background: #f4f0fa; padding: 10px; border-radius: 10px; font-size: .72rem; overflow: auto; max-height: 45vh; white-space: pre-wrap; word-break: break-all; user-select: text; -webkit-user-select: text; margin: 0; }
+</style>
+</head>
+<body>
+
+<section id="login" hidden>
+  <h1>Yoto Library Check 🎵</h1>
+  <p>Lists every playlist in your Yoto family library with the date it was last changed, so you can compare against what each player has downloaded.</p>
+  <button id="loginBtn" class="primary">Sign in with Yoto</button>
+  <p id="loginErr" class="err" hidden></p>
+  <p style="font-size:.9rem">🔒 You sign in on Yoto's own website. This page can only view; it cannot change anything in your account.</p>
+  <details style="font-size:.9rem;color:var(--soft)">
+    <summary>Set-up note</summary>
+    <p>This page's address is <code id="redirectShow"></code><br>It must be listed under "Allowed Callback URLs" in the Yoto developer app, and the app needs the device view permission.</p>
+  </details>
+</section>
+
+<div id="app" hidden>
+  <header>
+    <h1>Library Check</h1>
+    <button id="techBtn" class="btn">Tech info</button>
+  </header>
+  <p id="stats"></p>
+  <div class="controls">
+    <div class="row">
+      <input id="search" type="search" placeholder="Search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Search playlists">
+    </div>
+    <div class="row">
+      <button class="chip on" data-tab="all">All</button>
+      <button class="chip" data-tab="mine">My Cards</button>
+      <button class="chip" data-tab="club">Club</button>
+    </div>
+    <div class="row">
+      <label class="lbl" for="sortSel">Sort</label>
+      <select id="sortSel">
+        <option value="revNew">Last revised (newest)</option>
+        <option value="revOld">Last revised (oldest)</option>
+        <option value="az">A to Z</option>
+        <option value="added">Date added (newest)</option>
+      </select>
+    </div>
+    <div class="row">
+      <label class="lbl" for="since">Revised since</label>
+      <input id="since" type="date">
+      <button id="sinceClear" class="chip" hidden>Clear</button>
+    </div>
+    <div class="row">
+      <button id="csvBtn" class="btn">Download CSV</button>
+      <button id="copyBtn" class="btn">Copy list</button>
+      <button id="reloadBtn" class="btn">Reload</button>
+    </div>
+  </div>
+  <div id="msg" hidden></div>
+  <ul id="list"></ul>
+</div>
+
+<div id="tech" hidden>
+  <div class="box">
+    <h2>Tech info</h2>
+    <p>"Check players" asks Yoto what it will tell us about each player. Copy the result and paste it into the chat so I can see what is available.</p>
+    <div class="row">
+      <button class="btn" id="probeBtn">Check players</button>
+      <button class="btn" id="copyDbg">Copy</button>
+      <button class="btn danger" id="signOut">Sign out</button>
+      <button class="btn" id="techClose">Close</button>
+    </div>
+    <pre id="dbg"></pre>
+  </div>
+</div>
+<div id="toast" hidden></div>
+
+<script>
+'use strict';
+
+const VERSION = 'v1: library index with revised dates';
+
+const CONFIG = {
+  clientId: 'tpc_j3TNLEaMwAEHcDZBGtU5BZ',
+  authorizeUrl: 'https://login.yotoplay.com/authorize',
+  tokenUrl: 'https://login.yotoplay.com/oauth/token',
+  apiBase: 'https://api.yotoplay.com',
+  audience: 'https://api.yotoplay.com',
+  // View-only. Nothing here can change anything.
+  scope: 'user:content:view family:library:view family:devices:view offline_access',
+  redirectUri: location.origin + location.pathname
+};
+
+const $ = (id) => document.getElementById(id);
+const state = { cards: [], tab: 'all', sort: 'revNew', since: '', query: '', libInfo: null, probe: null, loadError: null };
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else e.setAttribute(k, v); }
+  for (const k of kids) e.append(k);
+  return e;
+}
+
+// <storage>
+function store(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+function fetchStored(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+function unstore(key) { try { localStorage.removeItem(key); } catch (e) {} }
+function readJson(key, fallback) {
+  try { const v = JSON.parse(fetchStored(key)); return v == null ? fallback : v; } catch (e) { return fallback; }
+}
+function writeJson(key, val) { store(key, JSON.stringify(val)); }
+
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+// 2026-11-03 (local date), or empty when unknown
+function isoDate(ms) {
+  if (!ms) return '';
+  const d = new Date(ms);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function niceDate(ms) {
+  if (!ms) return 'unknown';
+  const d = new Date(ms);
+  return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+}
+// Start of a yyyy-mm-dd day in local time (0 if blank or bad)
+function startOfDay(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : 0;
+}
+function tsOf(...vals) {
+  for (const v of vals) { const t = typeof v === 'string' ? Date.parse(v) : NaN; if (t > 0) return t; }
+  return 0;
+}
+// Which tab a library item belongs on (same rule as the player app).
+function isClub(item) {
+  const c = (item && item.card) || {};
+  const bits = [item && item.reason, item && item.shareType, c.availability]
+    .filter((x) => typeof x === 'string').join(' ').toLowerCase();
+  return /club|subscri|member/.test(bits) || (item && item.reason === 'user-add');
+}
+// Turn Yoto's library items into one tidy row per card. Duplicates merge: Club wins, newest revision wins.
+function cardsFrom(items) {
+  const byId = new Map();
+  for (const item of (items || [])) {
+    const c = (item && item.card) || {};
+    const id = (item && item.cardId) || c.cardId;
+    if (!id) continue;
+    let rev = 0, revFrom = '';
+    for (const [name, val] of [['card.updatedAt', c.updatedAt], ['item.updatedAt', item.updatedAt], ['card.createdAt', c.createdAt], ['item.createdAt', item.createdAt]]) {
+      const t = tsOf(val);
+      if (t) { rev = t; revFrom = name; break; }
+    }
+    const row = {
+      id, title: c.title || 'Untitled',
+      cover: (c.metadata && c.metadata.cover && c.metadata.cover.imageL) || null,
+      kind: isClub(item) ? 'club' : 'mine',
+      added: tsOf(item.addedAt, item.createdAt, c.createdAt),
+      rev, revFrom
+    };
+    const prev = byId.get(id);
+    if (!prev) { byId.set(id, row); continue; }
+    if (row.kind === 'club') prev.kind = 'club';
+    if (!prev.cover && row.cover) prev.cover = row.cover;
+    if (row.rev > prev.rev) { prev.rev = row.rev; prev.revFrom = row.revFrom; }
+    if (!prev.added && row.added) prev.added = row.added;
+  }
+  return Array.from(byId.values());
+}
+function matchesQuery(card, query) {
+  const t = card.title.toLowerCase();
+  return query.split(/\s+/).filter(Boolean).every((w) => t.includes(w));
+}
+function filterCards(cards, tab, sinceIso, query) {
+  const from = startOfDay(sinceIso);
+  const q = (query || '').trim().toLowerCase();
+  return cards.filter((c) => (tab === 'all' || c.kind === tab)
+    && (!from || c.rev >= from)
+    && (!q || matchesQuery(c, q)));
+}
+function sortCards(list, mode) {
+  const az = (a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+  const out = list.slice();
+  if (mode === 'revNew') out.sort((a, b) => (b.rev - a.rev) || az(a, b));
+  else if (mode === 'revOld') out.sort((a, b) => ((a.rev || Infinity) - (b.rev || Infinity)) || az(a, b));
+  else if (mode === 'added') out.sort((a, b) => (b.added - a.added) || az(a, b));
+  else out.sort(az);
+  return out;
+}
+function csvCell(v) {
+  const s = String(v == null ? '' : v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function buildCsv(list) {
+  const lines = [['Title', 'Tab', 'Last revised', 'Date added', 'Card ID'].map(csvCell).join(',')];
+  for (const c of list) {
+    lines.push([c.title, c.kind === 'club' ? 'Club' : 'My Cards', isoDate(c.rev), isoDate(c.added), c.id].map(csvCell).join(','));
+  }
+  return lines.join('\n');
+}
+function summarise(all, shown, sinceIso) {
+  const mine = all.filter((c) => c.kind === 'mine').length;
+  const club = all.length - mine;
+  let s = all.length + ' playlists (' + mine + ' My Cards, ' + club + ' Club).';
+  if (shown.length !== all.length) s += ' Showing ' + shown.length + '.';
+  if (sinceIso) s += ' Revised since ' + niceDate(startOfDay(sinceIso)) + ': ' + shown.length + '.';
+  return s;
+}
+// </storage>
+
+// <pkce>
+function b64url(buf) {
+  let s = '';
+  const bytes = new Uint8Array(buf);
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function randomString(n) {
+  const a = new Uint8Array(n);
+  crypto.getRandomValues(a);
+  return b64url(a).slice(0, n);
+}
+async function challengeFor(verifier) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  return b64url(digest);
+}
+// </pkce>
+
+/* ---------- sign-in ---------- */
+async function startLogin() {
+  const verifier = randomString(64);
+  const st = randomString(24);
+  store('lc_verifier', verifier);
+  store('lc_state', st);
+  const params = new URLSearchParams({
+    audience: CONFIG.audience, scope: CONFIG.scope, response_type: 'code', client_id: CONFIG.clientId,
+    code_challenge: await challengeFor(verifier), code_challenge_method: 'S256',
+    redirect_uri: CONFIG.redirectUri, state: st
+  });
+  location.href = CONFIG.authorizeUrl + '?' + params.toString();
+}
+async function handleCallback() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has('code') && !q.has('error')) return;
+  const code = q.get('code');
+  const returnedState = q.get('state');
+  const errorText = q.get('error_description') || q.get('error');
+  history.replaceState({}, '', CONFIG.redirectUri);
+  if (errorText) throw new Error('Yoto said: ' + errorText);
+  const verifier = fetchStored('lc_verifier');
+  const expected = fetchStored('lc_state');
+  unstore('lc_verifier'); unstore('lc_state');
+  if (!verifier || returnedState !== expected) throw new Error('Sign-in was interrupted. Please try again.');
+  const res = await fetch(CONFIG.tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code', client_id: CONFIG.clientId, code_verifier: verifier,
+      code: code, redirect_uri: CONFIG.redirectUri
+    })
+  });
+  if (!res.ok) throw new Error('Sign-in failed (code ' + res.status + ').');
+  saveTokens(await res.json(), null);
+}
+
+/* ---------- tokens ---------- */
+function getTokens() { try { return JSON.parse(fetchStored('lc_tokens') || 'null'); } catch (e) { return null; } }
+function saveTokens(t, prev) {
+  store('lc_tokens', JSON.stringify({
+    access_token: t.access_token,
+    refresh_token: t.refresh_token || (prev && prev.refresh_token) || null,
+    exp: Date.now() + (t.expires_in || 600) * 1000
+  }));
+}
+let refreshing = null;
+async function refreshTokens() {
+  if (refreshing) return refreshing;
+  refreshing = (async () => {
+    const t = getTokens();
+    if (!t || !t.refresh_token) throw new Error('signin');
+    const res = await fetch(CONFIG.tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', client_id: CONFIG.clientId, refresh_token: t.refresh_token })
+    });
+    if (!res.ok) {
+      if ([400, 401, 403].includes(res.status)) { unstore('lc_tokens'); throw new Error('signin'); }
+      throw new Error('Could not reach Yoto (' + res.status + ').');
+    }
+    saveTokens(await res.json(), t);  // refresh tokens are single use: keep the new one
+    return getTokens();
+  })();
+  try { return await refreshing; } finally { refreshing = null; }
+}
+async function api(path) {
+  let t = getTokens();
+  if (!t) throw new Error('signin');
+  if (Date.now() > t.exp - 60000) t = await refreshTokens();
+  const go = () => fetch(CONFIG.apiBase + path, { headers: { Authorization: 'Bearer ' + t.access_token } });
+  let res = await go();
+  if (res.status === 401) { t = await refreshTokens(); res = await go(); }
+  if (!res.ok) { const err = new Error('Yoto replied with code ' + res.status + '.'); err.status = res.status; throw err; }
+  const text = await res.text();
+  try { return text ? JSON.parse(text) : {}; } catch (e) { return {}; }
+}
+
+/* ---------- screens ---------- */
+function showLogin(message) {
+  $('app').hidden = true; $('login').hidden = false;
+  $('redirectShow').textContent = CONFIG.redirectUri;
+  const e = $('loginErr'); e.hidden = !message; e.textContent = message || '';
+}
+function showApp() { $('login').hidden = true; $('app').hidden = false; }
+function setMsg(text) { const m = $('msg'); m.hidden = !text; m.textContent = text || ''; }
+function toast(text) {
+  const t = $('toast'); t.textContent = text; t.hidden = false;
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => { t.hidden = true; }, 2200);
+}
+
+function placeholder(title) {
+  const first = Array.from((title || '').trim())[0] || '♪';
+  let sum = 0; for (const ch of title || '') sum += ch.charCodeAt(0);
+  const d = el('div', { class: 'ph' }, first.toUpperCase());
+  d.style.background = 'hsl(' + ((sum * 37) % 360) + ' 70% 82%)';
+  return d;
+}
+function artFor(card) {
+  const art = el('div', { class: 'art' });
+  if (card.cover) {
+    const img = el('img', { src: card.cover, alt: '', loading: 'lazy', draggable: 'false' });
+    img.onerror = () => { art.replaceChildren(placeholder(card.title)); };
+    art.append(img);
+  } else art.append(placeholder(card.title));
+  return art;
+}
+
+function currentList() {
+  return sortCards(filterCards(state.cards, state.tab, state.since, state.query), state.sort);
+}
+function render() {
+  const shown = currentList();
+  $('stats').textContent = state.cards.length ? summarise(state.cards, shown, state.since) : '';
+  $('sinceClear').hidden = !state.since;
+  for (const b of document.querySelectorAll('.chip[data-tab]')) b.classList.toggle('on', b.dataset.tab === state.tab);
+  const list = $('list');
+  list.replaceChildren();
+  for (const c of shown) {
+    const meta = el('div', { class: 'm' });
+    meta.innerHTML = 'Revised <b></b> · Added <span></span>';
+    meta.querySelector('b').textContent = niceDate(c.rev);
+    meta.querySelector('span').textContent = niceDate(c.added);
+    const li = el('li', { class: 'item' }, artFor(c),
+      el('div', { class: 'txt' }, el('div', { class: 't' }, c.title), meta),
+      el('span', { class: 'tag' + (c.kind === 'club' ? ' club' : '') }, c.kind === 'club' ? 'CLUB' : 'MINE'));
+    list.append(li);
+  }
+  if (!state.cards.length) setMsg(state.loadError || 'Loading playlists…');
+  else setMsg(shown.length ? '' : 'Nothing matches.');
+}
+
+/* ---------- library ---------- */
+async function loadLibrary() {
+  if (!state.cards.length) setMsg('Loading playlists…');
+  const fam = await api('/card/family/library?coverWidth=400&view=groups');
+  const items = Array.isArray(fam.cards) ? fam.cards : [];
+  state.cards = cardsFrom(items);
+  state.loadError = null;
+  const first = items[0] || null;
+  const revSources = {};
+  for (const c of state.cards) revSources[c.revFrom || 'none'] = (revSources[c.revFrom || 'none'] || 0) + 1;
+  state.libInfo = {
+    familyLibraryItems: items.length,
+    uniquePlaylists: state.cards.length,
+    revisedDateTakenFrom: revSources,
+    firstItemKeys: first ? Object.keys(first) : null,
+    firstCardKeys: first && first.card ? Object.keys(first.card) : null,
+    firstItemDates: first ? { addedAt: first.addedAt, createdAt: first.createdAt, updatedAt: first.updatedAt, cardUpdatedAt: first.card && first.card.updatedAt, cardCreatedAt: first.card && first.card.createdAt } : null,
+    firstCardContentKeys: first && first.card && first.card.content ? Object.keys(first.card.content) : null
+  };
+  writeJson('lc_library', { at: Date.now(), cards: state.cards });
+  showApp();
+  render();
+}
+function loadCache() {
+  const c = readJson('lc_library', null);
+  return c && Array.isArray(c.cards) ? c.cards.filter((x) => x && x.id && x.title) : [];
+}
+
+/* ---------- export ---------- */
+function downloadCsv() {
+  const list = currentList();
+  if (!list.length) { toast('Nothing to export'); return; }
+  const blob = new Blob([buildCsv(list)], { type: 'text/csv;charset=utf-8' });
+  const a = el('a', { href: URL.createObjectURL(blob), download: 'yoto-library-' + isoDate(Date.now()) + '.csv' });
+  document.body.append(a); a.click(); a.remove();
+  toast('Saved ' + list.length + ' rows');
+}
+async function copyList() {
+  const list = currentList();
+  if (!list.length) { toast('Nothing to copy'); return; }
+  const text = buildCsv(list);
+  try { await navigator.clipboard.writeText(text); toast('Copied ' + list.length + ' rows'); }
+  catch (e) {
+    const ta = el('textarea', { style: 'position:fixed;opacity:0' }); ta.value = text;
+    document.body.append(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e2) {}
+    ta.remove(); toast(ok ? 'Copied ' + list.length + ' rows' : 'Could not copy');
+  }
+}
+
+/* ---------- tech info + player probe ---------- */
+function cut(v, n) { const s = typeof v === 'string' ? v : JSON.stringify(v); return s && s.length > n ? s.slice(0, n) + '…[cut ' + (s.length - n) + ' more characters]' : s; }
+function techText() {
+  return JSON.stringify({
+    version: VERSION, callbackUsed: CONFIG.redirectUri, library: state.libInfo,
+    lastLoadError: state.loadError, players: state.probe
+  }, null, 2);
+}
+function openTech() { $('dbg').textContent = techText(); $('tech').hidden = false; }
+// Asks Yoto's player endpoints what they will say. Read-only (GET) calls only.
+async function probePlayers() {
+  $('probeBtn').disabled = true; $('dbg').textContent = 'Asking Yoto about your players…';
+  const out = { devicesList: null, players: [] };
+  try {
+    const res = await api('/device-v2/devices/mine');
+    const devices = Array.isArray(res.devices) ? res.devices : [];
+    out.devicesList = devices.map((d) => ({ name: d.name, id: d.deviceId, type: d.deviceType, family: d.deviceFamily, online: d.online, otherKeys: Object.keys(d) }));
+    for (const d of devices) {
+      const p = { name: d.name, calls: {} };
+      for (const path of ['config', 'status', 'downloads', 'content', 'library', 'cards']) {
+        const label = '/device-v2/{id}/' + path;
+        try {
+          const data = await api('/device-v2/' + encodeURIComponent(d.deviceId) + '/' + path);
+          p.calls[label] = { ok: true, topKeys: data && typeof data === 'object' ? Object.keys(data) : typeof data, sample: cut(data, path === 'config' ? 5000 : 1500) };
+        } catch (e) {
+          if (e.message === 'signin') throw e;
+          p.calls[label] = { ok: false, status: e.status || null, error: e.message };
+        }
+      }
+      out.players.push(p);
+    }
+  } catch (e) {
+    if (e.message === 'signin') { $('tech').hidden = true; showLogin('Please sign in again.'); return; }
+    out.error = e.message + (e.status === 403 || e.status === 401 ? ' (the app may need the device view permission ticked in the Yoto developer dashboard, then sign out and in again)' : '');
+  }
+  state.probe = out;
+  $('probeBtn').disabled = false;
+  $('dbg').textContent = techText();
+}
+
+/* ---------- wire up ---------- */
+function handleLoadError(e) {
+  if (e.message === 'signin') { showLogin('Please sign in again.'); return; }
+  state.loadError = e instanceof TypeError ? 'Cannot reach Yoto right now. Check the connection.' : e.message;
+  showApp();
+  if (state.cards.length) { setMsg(''); toast('Could not refresh: ' + state.loadError); return; }
+  render();
+}
+function wire() {
+  $('loginBtn').addEventListener('click', startLogin);
+  let timer = null;
+  $('search').addEventListener('input', (e) => { clearTimeout(timer); timer = setTimeout(() => { state.query = e.target.value; render(); }, 150); });
+  $('search').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
+  for (const b of document.querySelectorAll('.chip[data-tab]')) b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); });
+  $('sortSel').addEventListener('change', (e) => { state.sort = e.target.value; store('lc_sort', state.sort); render(); });
+  $('since').addEventListener('change', (e) => { state.since = e.target.value; render(); });
+  $('sinceClear').addEventListener('click', () => { state.since = ''; $('since').value = ''; render(); });
+  $('csvBtn').addEventListener('click', downloadCsv);
+  $('copyBtn').addEventListener('click', copyList);
+  $('reloadBtn').addEventListener('click', async () => { toast('Reloading…'); try { await loadLibrary(); toast('Up to date'); } catch (e) { handleLoadError(e); } });
+  $('techBtn').addEventListener('click', openTech);
+  $('techClose').addEventListener('click', () => { $('tech').hidden = true; });
+  $('probeBtn').addEventListener('click', probePlayers);
+  $('copyDbg').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('dbg').textContent); toast('Copied'); }
+    catch (e) { const r = document.createRange(); r.selectNodeContents($('dbg')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Selected: press Copy'); }
+  });
+  $('signOut').addEventListener('click', () => {
+    unstore('lc_tokens'); unstore('lc_library');
+    state.cards = []; $('tech').hidden = true; showLogin();
+  });
+}
+
+(async function init() {
+  wire();
+  try { await handleCallback(); } catch (e) { showLogin(e.message); return; }
+  if (!getTokens()) { showLogin(); return; }
+  const sort = fetchStored('lc_sort');
+  if (['revNew', 'revOld', 'az', 'added'].includes(sort)) state.sort = sort;
+  $('sortSel').value = state.sort;
+  const cached = loadCache();
+  if (cached.length) { state.cards = cached; showApp(); render(); }
+  try { await loadLibrary(); } catch (e) { handleLoadError(e); }
+})();
+</script>
+</body>
+</html>
