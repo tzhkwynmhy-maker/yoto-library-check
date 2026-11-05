@@ -11,7 +11,7 @@
 <style>
   :root {
     --bg: #fff4e0; --ink: #2b2340; --soft: #6d6486; --accent: #ff6f59; --accent-dark: #e4553f;
-    --card: #ffffff; --pill: #ffe3c2; --line: #f3d3a8; --good: #2e7d32;
+    --card: #ffffff; --pill: #ffe3c2; --line: #f3d3a8; --good: #2e7d32; --warn: #b45309;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   [hidden] { display: none !important; }
@@ -29,8 +29,11 @@
     padding: 14px 32px; border-radius: 999px; box-shadow: 0 5px 0 var(--accent-dark);
   }
   .primary:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--accent-dark); }
+  .primary:disabled { opacity: .55; cursor: default; }
+  .primary.small { font-size: 1.05rem; padding: 11px 24px; }
   .btn { background: var(--pill); font-weight: 700; padding: 10px 18px; border-radius: 999px; }
   .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: .55; }
   .btn.danger { background: #ffd6d2; }
   .err { color: #b3261e; font-weight: 600; }
 
@@ -48,21 +51,23 @@
   #app { max-width: 900px; margin: 0 auto; padding: max(env(safe-area-inset-top), 14px) 14px 40px; }
   header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 2px 10px; }
   header h1 { margin: 0; font-size: 1.6rem; }
+  .tabs { display: flex; gap: 8px; margin: 0 0 12px; }
   #stats { margin: 0 2px 12px; color: var(--soft); font-weight: 600; line-height: 1.4; }
   .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  #search, #sortSel, #since {
+  #search, #sortSel, #since, #playerSel, #appCount {
     font-size: 1rem; padding: 10px 16px; border-radius: 999px; border: 2px solid var(--line);
     background: #fff; outline: none; min-width: 0; -webkit-appearance: none; appearance: none;
   }
   #search { flex: 1 1 100%; }
-  #search:focus, #since:focus { border-color: var(--accent); }
+  #search:focus, #since:focus, #playerSel:focus, #appCount:focus { border-color: var(--accent); }
   #since { padding: 8px 14px; }
+  #appCount { width: 7rem; }
   .lbl { font-weight: 700; color: var(--soft); font-size: .95rem; }
   .chip { background: var(--pill); font-weight: 700; padding: 9px 18px; border-radius: 999px; }
   .chip.on { background: var(--accent); color: #fff; box-shadow: 0 3px 0 var(--accent-dark); }
 
-  #list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  #list, .rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
   .item {
     display: flex; align-items: center; gap: 12px; background: var(--card); border-radius: 16px;
     padding: 8px 14px 8px 8px; box-shadow: 0 2px 8px rgba(60, 40, 90, .08);
@@ -76,8 +81,28 @@
   .m b { color: var(--ink); }
   .tag { flex: none; font-size: .7rem; font-weight: 800; letter-spacing: .4px; padding: 3px 8px; border-radius: 999px; background: var(--pill); color: var(--soft); }
   .tag.club { background: #d9ecff; color: #1f5fa8; }
+  .tag.warn { background: #fde8c8; color: var(--warn); }
   #msg { padding: 12px 4px; color: var(--soft); font-weight: 600; }
-  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 20px; border-radius: 999px; font-weight: 700; z-index: 40; }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 20px; border-radius: 999px; font-weight: 700; z-index: 40; max-width: 90vw; text-align: center; }
+
+  /* check a player */
+  .panel { background: var(--card); border-radius: 18px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(60,40,90,.08); margin-bottom: 12px; }
+  .panel p { margin: 0 0 8px; color: var(--soft); line-height: 1.45; }
+  .panel ol { margin: 0 0 4px; padding-left: 1.2rem; color: var(--soft); line-height: 1.5; }
+  .field { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+  progress { width: 100%; height: 14px; accent-color: var(--accent); }
+  #progText { margin: 6px 0 10px; font-weight: 600; color: var(--soft); }
+  .summary { font-size: 1.1rem; font-weight: 700; line-height: 1.4; margin: 0 0 6px; }
+  .summary .good { color: var(--good); }
+  .summary .bad { color: var(--accent-dark); }
+  .note { color: var(--soft); font-size: .9rem; line-height: 1.45; margin: 4px 0; }
+  details.sec { margin: 0 0 12px; }
+  details.sec > summary { cursor: pointer; font-weight: 800; font-size: 1.05rem; padding: 10px 4px; list-style: none; }
+  details.sec > summary::-webkit-details-marker { display: none; }
+  details.sec > summary::before { content: "▸ "; color: var(--accent); }
+  details.sec[open] > summary::before { content: "▾ "; }
+  details.sec .count { color: var(--soft); font-weight: 700; }
+  .plain { margin: 0; padding: 0 0 0 1.1rem; color: var(--soft); line-height: 1.5; font-size: .92rem; }
 
   #tech { position: fixed; inset: 0; background: rgba(30,20,50,.55); z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px; }
   #tech .box { background: #fff; border-radius: 22px; padding: 20px; width: 100%; max-width: 640px; max-height: 92vh; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
@@ -90,13 +115,13 @@
 
 <section id="login" hidden>
   <h1>Yoto Library Check 🎵</h1>
-  <p>Lists every playlist in your Yoto family library with the date it was last changed, so you can compare against what each player has downloaded.</p>
+  <p>Lists every playlist in your Yoto family library with the date it was last changed, and checks a recording of a player's download list to show what is missing or out of date.</p>
   <button id="loginBtn" class="primary">Sign in with Yoto</button>
   <p id="loginErr" class="err" hidden></p>
   <p style="font-size:.9rem">🔒 You sign in on Yoto's own website. This page can only view; it cannot change anything in your account.</p>
   <details style="font-size:.9rem;color:var(--soft)">
     <summary>Set-up note</summary>
-    <p>This page's address is <code id="redirectShow"></code><br>It must be listed under "Allowed Callback URLs" in the Yoto developer app, and the app needs the device view permission.</p>
+    <p>This page's address is <code id="redirectShow"></code><br>It must be listed under "Allowed Callback URLs" in the Yoto developer app.</p>
   </details>
 </section>
 
@@ -105,38 +130,72 @@
     <h1>Library Check</h1>
     <button id="techBtn" class="btn">Tech info</button>
   </header>
-  <p id="stats"></p>
-  <div class="controls">
-    <div class="row">
-      <input id="search" type="search" placeholder="Search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Search playlists">
-    </div>
-    <div class="row">
-      <button class="chip on" data-tab="all">All</button>
-      <button class="chip" data-tab="mine">My Cards</button>
-      <button class="chip" data-tab="club">Club</button>
-    </div>
-    <div class="row">
-      <label class="lbl" for="sortSel">Sort</label>
-      <select id="sortSel">
-        <option value="revNew">Last revised (newest)</option>
-        <option value="revOld">Last revised (oldest)</option>
-        <option value="az">A to Z</option>
-        <option value="added">Date added (newest)</option>
-      </select>
-    </div>
-    <div class="row">
-      <label class="lbl" for="since">Revised since</label>
-      <input id="since" type="date">
-      <button id="sinceClear" class="chip" hidden>Clear</button>
-    </div>
-    <div class="row">
-      <button id="csvBtn" class="btn">Download CSV</button>
-      <button id="copyBtn" class="btn">Copy list</button>
-      <button id="reloadBtn" class="btn">Reload</button>
-    </div>
+  <div class="tabs">
+    <button class="chip on" data-view="lib">Library</button>
+    <button class="chip" data-view="check">Check a player</button>
   </div>
-  <div id="msg" hidden></div>
-  <ul id="list"></ul>
+
+  <div id="view-lib">
+    <p id="stats"></p>
+    <div class="controls">
+      <div class="row">
+        <input id="search" type="search" placeholder="Search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Search playlists">
+      </div>
+      <div class="row">
+        <button class="chip on" data-tab="all">All</button>
+        <button class="chip" data-tab="mine">My Cards</button>
+        <button class="chip" data-tab="club">Club</button>
+      </div>
+      <div class="row">
+        <label class="lbl" for="sortSel">Sort</label>
+        <select id="sortSel">
+          <option value="revNew">Last revised (newest)</option>
+          <option value="revOld">Last revised (oldest)</option>
+          <option value="az">A to Z</option>
+          <option value="added">Date added (newest)</option>
+        </select>
+      </div>
+      <div class="row">
+        <label class="lbl" for="since">Revised since</label>
+        <input id="since" type="date">
+        <button id="sinceClear" class="chip" hidden>Clear</button>
+      </div>
+      <div class="row">
+        <button id="csvBtn" class="btn">Download CSV</button>
+        <button id="copyBtn" class="btn">Copy list</button>
+        <button id="reloadBtn" class="btn">Reload</button>
+      </div>
+    </div>
+    <div id="msg" hidden></div>
+    <ul id="list"></ul>
+  </div>
+
+  <div id="view-check" hidden>
+    <div class="panel">
+      <p><b>1.</b> In the Yoto app, open Settings → My Players → your player → Audio download status.</p>
+      <p><b>2.</b> Start a screen recording, then scroll slowly down the whole list (about two seconds per screen) and stop the recording.</p>
+      <p><b>3.</b> Choose the recording below. Screenshots work too, if you only need to check a few. It is read on this device and nothing is uploaded.</p>
+      <div class="field">
+        <label class="lbl" for="playerSel">Which player?</label>
+        <select id="playerSel"><option value="">Loading players…</option></select>
+      </div>
+      <div class="field">
+        <label class="lbl" for="appCount">Number the Yoto app shows (optional)</label>
+        <input id="appCount" type="number" inputmode="numeric" min="0" placeholder="e.g. 307">
+      </div>
+      <input id="files" type="file" accept="video/*,image/*" multiple hidden>
+      <div class="row">
+        <button id="pickBtn" class="primary small">Choose recording</button>
+        <button id="cancelBtn" class="btn danger" hidden>Stop</button>
+      </div>
+      <div id="progWrap" hidden>
+        <p id="progText"></p>
+        <progress id="prog" max="100" value="0"></progress>
+      </div>
+    </div>
+    <div id="checkMsg" class="err" hidden></div>
+    <div id="results" hidden></div>
+  </div>
 </div>
 
 <div id="tech" hidden>
@@ -157,7 +216,7 @@
 <script>
 'use strict';
 
-const VERSION = 'v1: library index with revised dates';
+const VERSION = 'v2: library index plus Check a player';
 
 const CONFIG = {
   clientId: 'tpc_j3TNLEaMwAEHcDZBGtU5BZ',
@@ -169,9 +228,14 @@ const CONFIG = {
   scope: 'user:content:view family:library:view family:devices:view offline_access',
   redirectUri: location.origin + location.pathname
 };
+// Text reader (Tesseract.js), loaded only when a recording is checked. Default worker, core and language paths are used.
+const TESS_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
 
 const $ = (id) => document.getElementById(id);
-const state = { cards: [], tab: 'all', sort: 'revNew', since: '', query: '', libInfo: null, probe: null, loadError: null };
+const state = {
+  cards: [], tab: 'all', sort: 'revNew', since: '', query: '', libInfo: null, probe: null, loadError: null,
+  view: 'lib', devices: null, check: { running: false, cancel: false, result: null, diag: null }
+};
 
 function el(tag, attrs = {}, ...kids) {
   const e = document.createElement(tag);
@@ -201,6 +265,11 @@ function niceDate(ms) {
   if (!ms) return 'unknown';
   const d = new Date(ms);
   return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+}
+// 2026-11-03 -> "3 Nov 2026"
+function niceIso(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  return m ? (+m[3]) + ' ' + MONTHS[+m[2] - 1] + ' ' + m[1] : 'unknown';
 }
 // Start of a yyyy-mm-dd day in local time (0 if blank or bad)
 function startOfDay(iso) {
@@ -286,6 +355,171 @@ function summarise(all, shown, sinceIso) {
   return s;
 }
 // </storage>
+
+// <matching>
+// Reads the text of the Yoto app's "Player downloads" list and matches it to the library. Pure functions, no screen access.
+const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+const DATE_LINE = /(?:^|\s)(\w{1,3})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\.?\s+(\w{4})\b(.*)$/i;
+const DL_WORD = /\S*(?:ownload|wnload|nloaded)\S*/i;
+const ELLIPSIS = /(?:\.{2,}|…)\s*$/;
+
+function normTitle(s) { return String(s || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, ''); }
+function bigrams(s) {
+  const m = new Map();
+  for (let i = 0; i < s.length - 1; i++) { const g = s.substr(i, 2); m.set(g, (m.get(g) || 0) + 1); }
+  return { m, n: Math.max(0, s.length - 1) };
+}
+function dice(a, b) {
+  if (!a.n || !b.n) return 0;
+  let inter = 0;
+  for (const [g, c] of a.m) { const d = b.m.get(g); if (d) inter += Math.min(c, d); }
+  return (2 * inter) / (a.n + b.n);
+}
+function lev(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = new Array(n + 1), cur = new Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    cur[0] = i;
+    const ai = a.charCodeAt(i - 1);
+    for (let j = 1; j <= n; j++) {
+      const cost = ai === b.charCodeAt(j - 1) ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+    }
+    const t = prev; prev = cur; cur = t;
+  }
+  return prev[n];
+}
+function simRatio(a, b) { return a && b ? 1 - lev(a, b) / Math.max(a.length, b.length) : 0; }
+
+// One entry per "title, then Downloaded date" pair found in a frame's text.
+function parseFrameText(text) {
+  const out = [];
+  let buf = [];
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = DATE_LINE.exec(line);
+    if (m) {
+      const dayOk = /^\d{1,2}$/.test(m[1]);
+      const yearOk = /^20\d\d$/.test(m[3]);
+      if (DL_WORD.test(line) || (dayOk && yearOk)) {
+        const date = dayOk && yearOk ? m[3] + '-' + pad2(MON[m[2].toLowerCase()]) + '-' + pad2(+m[1]) : null;
+        const before = line.slice(0, m.index).replace(DL_WORD, '').trim();
+        if (before.length > 3) buf.push(before);
+        out.push({ lines: buf.slice(-3), date });
+        buf = [];
+        const rest = (m[4] || '').trim();
+        if (rest.length > 2) buf.push(rest);
+        continue;
+      }
+    }
+    buf.push(line);
+  }
+  return out;
+}
+
+function buildIndex(cards) {
+  return cards.map((c) => { const n = normTitle(c.title); return { id: c.id, n, bg: bigrams(n) }; });
+}
+// Best library match for a normalised string, or null when unsure.
+function scoreAgainst(e, truncated, index) {
+  const eb = bigrams(e), el = e.length;
+  const byId = new Map();
+  const ranked = index.map((c) => ({ c, d: dice(eb, c.bg) })).sort((a, b) => b.d - a.d).slice(0, 8);
+  for (const { c } of ranked) byId.set(c.id, { c, s: simRatio(e, c.n) });
+  for (const c of index) {
+    let s = 0;
+    if (el >= 8 && c.n.length > el && c.n.endsWith(e)) s = 0.9;           // top of a title scrolled off the screen
+    if (truncated && el >= 8 && c.n.startsWith(e)) s = Math.max(s, 0.95);  // "Long title..." shown with an ellipsis
+    if (s > 0) { const cur = byId.get(c.id); if (!cur || s > cur.s) byId.set(c.id, { c, s }); }
+  }
+  const arr = Array.from(byId.values()).sort((a, b) => b.s - a.s);
+  const top = arr[0], second = arr[1];
+  if (!top || top.s < 0.86) return null;
+  const sameTitle = (x) => x.c.n === top.c.n;
+  if (second && !sameTitle(second) && top.s - second.s <= 0.02) return null;
+  return { ids: arr.filter((x) => sameTitle(x) && top.s - x.s <= 0.02).map((x) => x.c.id), score: top.s };
+}
+// Titles wrap over up to three lines, so try the last one, two and three lines and keep the best.
+function matchTitle(lines, index) {
+  let best = null;
+  for (let k = 1; k <= Math.min(3, lines.length); k++) {
+    const raw = lines.slice(-k).join(' ');
+    const truncated = ELLIPSIS.test(raw);
+    const e = normTitle(raw.replace(ELLIPSIS, ''));
+    if (e.length < 4) continue;
+    const r = scoreAgainst(e, truncated, index);
+    if (r && (!best || r.score >= best.score)) best = r;
+  }
+  return best;
+}
+function matchEntries(entries, index, memo) {
+  memo = memo || new Map();
+  const found = new Map();
+  const unmatched = new Map();
+  for (const e of entries) {
+    if (!e.lines.length) continue;
+    const key = e.lines.join('|');
+    let m = memo.get(key);
+    if (m === undefined) { m = matchTitle(e.lines, index) || null; memo.set(key, m); }
+    if (m) {
+      for (const id of m.ids) {
+        let f = found.get(id);
+        if (!f) { f = { dates: new Map(), seen: 0, date: null }; found.set(id, f); }
+        f.seen++;
+        if (e.date) f.dates.set(e.date, (f.dates.get(e.date) || 0) + 1);
+      }
+    } else {
+      const t = e.lines.join(' ').trim();
+      if (t.length >= 4) unmatched.set(t, (unmatched.get(t) || 0) + 1);
+    }
+  }
+  for (const f of found.values()) {
+    let best = null, bc = 0;
+    for (const [d, c] of f.dates) if (c > bc) { best = d; bc = c; }
+    f.date = best;
+  }
+  return { found, unmatched };
+}
+const STREAMING = /^yoto (daily|radio|sleep radio)\b/i;
+// Which library playlists are on the player, missing, or downloaded before they were last revised.
+function compareToLibrary(cards, found, shortcutIds) {
+  const missing = [], stale = [], same = [], present = [];
+  for (const c of cards) {
+    const f = found.get(c.id);
+    if (!f) { missing.push(c); continue; }
+    present.push(c);
+    const rev = isoDate(c.rev);
+    if (f.date && rev) {
+      if (f.date < rev) stale.push({ card: c, downloaded: f.date, revised: rev });
+      else if (f.date === rev) same.push({ card: c, downloaded: f.date, revised: rev });
+    }
+  }
+  const sc = new Set(shortcutIds || []);
+  return {
+    present, missing, stale, same,
+    shortcutMissing: missing.filter((c) => sc.has(c.id)),
+    shortcutStale: stale.filter((x) => sc.has(x.card.id)),
+    streamingMissing: missing.filter((c) => STREAMING.test(c.title))
+  };
+}
+// The playlists named in a player's day/night shortcut lists and button shortcuts.
+function shortcutIdsFrom(deviceConfig) {
+  const d = (deviceConfig && deviceConfig.device) || {};
+  const cfg = d.config || {};
+  const ids = new Set();
+  for (const k of ['dayShortcutList', 'nightShortcutList']) for (const id of (cfg[k] || [])) if (id) ids.add(String(id));
+  const modes = (d.shortcuts && d.shortcuts.modes) || {};
+  for (const mode of Object.values(modes)) for (const item of ((mode && mode.content) || [])) {
+    const id = item && item.params && item.params.card;
+    if (id) ids.add(String(id));
+  }
+  return Array.from(ids);
+}
+// </matching>
 
 // <pkce>
 function b64url(buf) {
@@ -393,7 +627,14 @@ function showApp() { $('login').hidden = true; $('app').hidden = false; }
 function setMsg(text) { const m = $('msg'); m.hidden = !text; m.textContent = text || ''; }
 function toast(text) {
   const t = $('toast'); t.textContent = text; t.hidden = false;
-  clearTimeout(toast.timer); toast.timer = setTimeout(() => { t.hidden = true; }, 2200);
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => { t.hidden = true; }, 2600);
+}
+function setView(v) {
+  state.view = v;
+  $('view-lib').hidden = v !== 'lib';
+  $('view-check').hidden = v !== 'check';
+  for (const b of document.querySelectorAll('.chip[data-view]')) b.classList.toggle('on', b.dataset.view === v);
+  if (v === 'check') loadDevices();
 }
 
 function placeholder(title) {
@@ -466,25 +707,302 @@ function loadCache() {
 }
 
 /* ---------- export ---------- */
-function downloadCsv() {
-  const list = currentList();
-  if (!list.length) { toast('Nothing to export'); return; }
-  const blob = new Blob([buildCsv(list)], { type: 'text/csv;charset=utf-8' });
-  const a = el('a', { href: URL.createObjectURL(blob), download: 'yoto-library-' + isoDate(Date.now()) + '.csv' });
+function saveCsvFile(text, name, count) {
+  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+  const a = el('a', { href: URL.createObjectURL(blob), download: name });
   document.body.append(a); a.click(); a.remove();
-  toast('Saved ' + list.length + ' rows');
+  toast('Saved ' + count + ' rows');
 }
-async function copyList() {
-  const list = currentList();
-  if (!list.length) { toast('Nothing to copy'); return; }
-  const text = buildCsv(list);
-  try { await navigator.clipboard.writeText(text); toast('Copied ' + list.length + ' rows'); }
+async function copyText(text, okMessage) {
+  try { await navigator.clipboard.writeText(text); toast(okMessage); }
   catch (e) {
     const ta = el('textarea', { style: 'position:fixed;opacity:0' }); ta.value = text;
     document.body.append(ta); ta.select();
     let ok = false; try { ok = document.execCommand('copy'); } catch (e2) {}
-    ta.remove(); toast(ok ? 'Copied ' + list.length + ' rows' : 'Could not copy');
+    ta.remove(); toast(ok ? okMessage : 'Could not copy');
   }
+}
+function downloadCsv() {
+  const list = currentList();
+  if (!list.length) { toast('Nothing to export'); return; }
+  saveCsvFile(buildCsv(list), 'yoto-library-' + isoDate(Date.now()) + '.csv', list.length);
+}
+function copyList() {
+  const list = currentList();
+  if (!list.length) { toast('Nothing to copy'); return; }
+  copyText(buildCsv(list), 'Copied ' + list.length + ' rows');
+}
+
+/* ---------- check a player ---------- */
+async function loadDevices() {
+  if (state.devices) return;
+  const sel = $('playerSel');
+  try {
+    const res = await api('/device-v2/devices/mine');
+    state.devices = (Array.isArray(res.devices) ? res.devices : []).map((d) => ({ id: d.deviceId, name: d.name || 'Player', online: d.online }));
+  } catch (e) {
+    if (e.message === 'signin') { showLogin('Please sign in again.'); return; }
+    state.devices = [];
+  }
+  sel.replaceChildren(el('option', { value: '' }, state.devices.length ? 'Choose a player…' : "Couldn't load players (shortcuts won't be checked)"));
+  for (const d of state.devices) sel.append(el('option', { value: d.id }, d.name));
+}
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve;
+    s.onerror = () => reject(new Error("Couldn't load the text reader. It needs an internet connection."));
+    document.head.append(s);
+  });
+}
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+// Crop to the list part of the Yoto app screen, turn light-on-dark text into dark-on-light, and return a canvas.
+function cropForReading(src, w, h) {
+  const sx = Math.round(w * 0.19), sy = Math.round(h * 0.215), sw = Math.round(w * 0.78), sh = Math.round(h * 0.575);
+  const scale = sw > 1000 ? 1000 / sw : 1;
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(sw * scale)); cv.height = Math.max(1, Math.round(sh * scale));
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(src, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+  const img = ctx.getImageData(0, 0, cv.width, cv.height);
+  const d = img.data;
+  let sum = 0;
+  for (let i = 0; i < d.length; i += 4) sum += d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+  const dark = sum / (d.length / 4) < 128;
+  for (let i = 0; i < d.length; i += 4) {
+    const g = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    const v = dark ? 255 - g : g;
+    d[i] = d[i + 1] = d[i + 2] = v;
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv;
+}
+// Tiny fingerprint of a canvas so frames that did not change (scroll paused) are not read twice.
+function fingerprint(cv) {
+  const t = document.createElement('canvas'); t.width = 24; t.height = 48;
+  const c = t.getContext('2d', { willReadFrequently: true });
+  c.drawImage(cv, 0, 0, 24, 48);
+  const d = c.getImageData(0, 0, 24, 48).data, out = new Uint8Array(24 * 48);
+  for (let i = 0; i < out.length; i++) out[i] = d[i * 4];
+  return out;
+}
+function fpDiff(a, b) {
+  if (!a || !b) return 255;
+  let s = 0; for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]);
+  return s / a.length;
+}
+function seekVideo(v, t) {
+  return new Promise((resolve) => {
+    const done = () => { v.removeEventListener('seeked', done); resolve(); };
+    v.addEventListener('seeked', done);
+    v.currentTime = t;
+  });
+}
+function loadImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => resolve({ img, url });
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Couldn't open the image " + file.name + '.')); };
+    img.src = url;
+  });
+}
+function openVideoFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    v.onloadeddata = () => resolve({ v, url });
+    v.onerror = () => { URL.revokeObjectURL(url); reject(new Error("This browser can't open " + file.name + '. Try Safari or Chrome, or use screenshots instead.')); };
+    v.src = url;
+  });
+}
+
+function setProgress(text, pct) {
+  $('progWrap').hidden = false;
+  $('progText').textContent = text;
+  if (pct != null) $('prog').value = pct;
+}
+function checkError(text) { const e = $('checkMsg'); e.hidden = !text; e.textContent = text || ''; }
+
+async function runCheck(files) {
+  const chk = state.check;
+  if (chk.running) return;
+  if (!state.cards.length) { checkError('Your library has not loaded yet. Open the Library tab first.'); return; }
+  checkError('');
+  chk.running = true; chk.cancel = false;
+  $('results').hidden = true; $('results').replaceChildren();
+  $('pickBtn').disabled = true; $('cancelBtn').hidden = false;
+  const index = buildIndex(state.cards);
+  const memo = new Map();
+  const entries = [];
+  const diag = { frames: 0, read: 0, skippedUnchanged: 0, files: files.map((f) => f.name + ' (' + Math.round(f.size / 1e6) + ' MB)') };
+  let scheduler = null;
+  try {
+    // the player's shortcut list, if a player was chosen
+    const deviceId = $('playerSel').value;
+    let shortcutIds = [], playerName = '';
+    if (deviceId) {
+      const d = (state.devices || []).find((x) => x.id === deviceId);
+      playerName = d ? d.name : '';
+      try { shortcutIds = shortcutIdsFrom(await api('/device-v2/' + encodeURIComponent(deviceId) + '/config')); }
+      catch (e) { if (e.message === 'signin') throw e; diag.shortcutError = e.message; }
+    }
+    setProgress('Loading the text reader…', 0);
+    if (!window.Tesseract) await loadScript(TESS_URL);
+    const T = window.Tesseract;
+    const n = Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 2) - 1));
+    scheduler = T.createScheduler();
+    for (let i = 0; i < n; i++) {
+      const w = await T.createWorker('eng');
+      try { await w.setParameters({ tessedit_pageseg_mode: '6' }); } catch (e) { /* default mode still works */ }
+      scheduler.addWorker(w);
+    }
+    let inflight = 0, lastFp = null;
+    const readFrame = async (cv) => {
+      while (inflight >= n + 1) await sleep(25);
+      inflight++;
+      scheduler.addJob('recognize', cv).then((r) => {
+        diag.read++;
+        for (const e of parseFrameText(r && r.data && r.data.text)) entries.push(e);
+      }).catch((e) => { diag.readErrors = (diag.readErrors || 0) + 1; diag.lastReadError = String(e && e.message || e); })
+        .finally(() => { inflight--; });
+    };
+    const quickCount = () => matchEntries(entries, index, memo).found.size;
+    const STEP = 0.5;
+    for (let fi = 0; fi < files.length && !chk.cancel; fi++) {
+      const file = files[fi];
+      const label = 'File ' + (fi + 1) + ' of ' + files.length + ': ';
+      if (file.type.startsWith('image/')) {
+        const { img, url } = await loadImageFile(file);
+        await readFrame(cropForReading(img, img.naturalWidth, img.naturalHeight));
+        diag.frames++;
+        URL.revokeObjectURL(url);
+        setProgress(label + 'reading screenshot…', (fi + 1) / files.length * 100);
+        continue;
+      }
+      const { v, url } = await openVideoFile(file);
+      const dur = v.duration;
+      if (!isFinite(dur) || dur <= 0) throw new Error("Couldn't read the length of " + file.name + '.');
+      const total = Math.floor(dur / STEP);
+      let step = 0;
+      for (let t = 0.1; t < dur && !chk.cancel; t += STEP, step++) {
+        await seekVideo(v, t);
+        const cv = cropForReading(v, v.videoWidth, v.videoHeight);
+        diag.frames++;
+        const fp = fingerprint(cv);
+        if (fpDiff(fp, lastFp) < 1.5) { diag.skippedUnchanged++; }
+        else { lastFp = fp; await readFrame(cv); }
+        if (step % 6 === 0) {
+          setProgress(label + Math.round(Math.min(100, step / total * 100)) + '%  ·  ' + quickCount() + ' playlists found so far',
+            (fi + Math.min(1, step / total)) / files.length * 100);
+          await sleep(0);
+        }
+      }
+      URL.revokeObjectURL(url);
+    }
+    while (inflight > 0) await sleep(40);
+    if (chk.cancel) { setProgress('Stopped.', null); return; }
+    const { found, unmatched } = matchEntries(entries, index, memo);
+    const cmp = compareToLibrary(state.cards, found, shortcutIds);
+    const credibleUnmatched = Array.from(unmatched.entries()).filter(([t, c]) => c >= 2 && t.length >= 6).sort((a, b) => b[1] - a[1]);
+    chk.result = { playerName, shortcutIds, cmp, found: found.size, unmatched: credibleUnmatched, appCount: parseInt($('appCount').value, 10) || 0 };
+    diag.entries = entries.length;
+    diag.matched = found.size;
+    diag.shortcutIds = shortcutIds.length;
+    diag.unmatchedSample = credibleUnmatched.slice(0, 25);
+    chk.diag = diag;
+    setProgress('Done.', 100);
+    renderResults();
+  } catch (e) {
+    if (e.message === 'signin') { showLogin('Please sign in again.'); }
+    else { checkError(e.message || String(e)); diag.error = e.message; chk.diag = diag; }
+  } finally {
+    if (scheduler) { try { await scheduler.terminate(); } catch (e) {} }
+    chk.running = false;
+    $('pickBtn').disabled = false; $('cancelBtn').hidden = true;
+    $('files').value = '';
+  }
+}
+
+function resultRow(card, metaHtml, tagText, tagClass) {
+  const meta = el('div', { class: 'm' });
+  meta.innerHTML = metaHtml;
+  const li = el('li', { class: 'item' }, artFor(card), el('div', { class: 'txt' }, el('div', { class: 't' }, card.title), meta));
+  if (tagText) li.append(el('span', { class: 'tag' + (tagClass ? ' ' + tagClass : '') }, tagText));
+  return li;
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function section(title, count, open, body) {
+  const d = el('details', { class: 'sec' });
+  if (open) d.open = true;
+  const s = el('summary', {}, title + ' ');
+  s.append(el('span', { class: 'count' }, '(' + count + ')'));
+  d.append(s, body);
+  return d;
+}
+function resultsCsv(r) {
+  const lines = [['Status', 'Title', 'Tab', 'Last revised', 'Downloaded on player', 'Shortcut', 'Card ID'].map(csvCell).join(',')];
+  const sc = new Set(r.shortcutIds);
+  const add = (status, c, dl) => lines.push([status, c.title, c.kind === 'club' ? 'Club' : 'My Cards', isoDate(c.rev), dl || '', sc.has(c.id) ? 'yes' : '', c.id].map(csvCell).join(','));
+  for (const c of r.cmp.missing) add('Missing', c, '');
+  for (const x of r.cmp.stale) add('Out of date', x.card, x.downloaded);
+  return lines.join('\n');
+}
+function renderResults() {
+  const r = state.check.result;
+  const box = $('results');
+  box.replaceChildren();
+  if (!r) { box.hidden = true; return; }
+  const cmp = r.cmp, total = state.cards.length;
+  const sum = el('div', { class: 'panel' });
+  const who = r.playerName ? r.playerName + ' has' : 'This player has';
+  const p = el('p', { class: 'summary' });
+  p.innerHTML = esc(who) + ' <span class="good">' + cmp.present.length + '</span> of your ' + total + ' playlists. '
+    + '<span class="' + (cmp.missing.length ? 'bad' : 'good') + '">' + cmp.missing.length + ' missing</span>, '
+    + '<span class="' + (cmp.stale.length ? 'bad' : 'good') + '">' + cmp.stale.length + ' out of date</span>.';
+  sum.append(p);
+  if (r.appCount) {
+    const seen = r.found + r.unmatched.length;
+    const n = el('p', { class: 'note' });
+    n.textContent = seen === r.appCount
+      ? 'The Yoto app says ' + r.appCount + ' and I found ' + seen + ', so every download was read. ✓'
+      : 'The Yoto app says ' + r.appCount + ' but I found ' + seen + '. ' + (seen < r.appCount ? 'Some may have been scrolled past too fast, so a missing playlist below might actually be on the player. Try a slower recording.' : 'A few lines may have been read twice.');
+    sum.append(n);
+  }
+  if (cmp.same.length) sum.append(el('p', { class: 'note' }, cmp.same.length + ' were downloaded on the same day they were last revised. The app only shows the day, so I can\'t tell which came first.'));
+  const row = el('div', { class: 'row' });
+  const bCopy = el('button', { class: 'btn' }, 'Copy missing list');
+  bCopy.addEventListener('click', () => copyText(cmp.missing.map((c) => c.title).join('\n'), 'Copied ' + cmp.missing.length + ' titles'));
+  const bCsv = el('button', { class: 'btn' }, 'Download CSV');
+  bCsv.addEventListener('click', () => saveCsvFile(resultsCsv(r), 'yoto-player-check-' + isoDate(Date.now()) + '.csv', cmp.missing.length + cmp.stale.length));
+  row.append(bCopy, bCsv);
+  sum.append(row);
+  box.append(sum);
+
+  const sc = cmp.shortcutMissing.length + cmp.shortcutStale.length;
+  if (r.shortcutIds.length) {
+    const rows = el('ul', { class: 'rows' });
+    for (const c of cmp.shortcutMissing) rows.append(resultRow(c, 'Not on the player · revised <b>' + esc(niceDate(c.rev)) + '</b>', 'MISSING', 'warn'));
+    for (const x of cmp.shortcutStale) rows.append(resultRow(x.card, 'Downloaded <b>' + esc(niceIso(x.downloaded)) + '</b> · revised <b>' + esc(niceIso(x.revised)) + '</b>', 'OLD', 'warn'));
+    const body = sc ? rows : el('p', { class: 'note' }, 'All ' + r.shortcutIds.length + ' shortcut playlists are on the player and up to date.');
+    box.append(section('Shortcut playlists that need attention', sc, sc > 0, body));
+  }
+  const miss = el('ul', { class: 'rows' });
+  for (const c of cmp.missing) miss.append(resultRow(c, 'Revised <b>' + esc(niceDate(c.rev)) + '</b>' + (STREAMING.test(c.title) ? ' · this one may stream rather than download' : ''), c.kind === 'club' ? 'CLUB' : 'MINE', c.kind === 'club' ? 'club' : ''));
+  box.append(section('Missing from the player', cmp.missing.length, cmp.missing.length > 0, cmp.missing.length ? miss : el('p', { class: 'note' }, 'Nothing is missing.')));
+  const old = el('ul', { class: 'rows' });
+  for (const x of cmp.stale) old.append(resultRow(x.card, 'Downloaded <b>' + esc(niceIso(x.downloaded)) + '</b> · revised <b>' + esc(niceIso(x.revised)) + '</b>', x.card.kind === 'club' ? 'CLUB' : 'MINE', x.card.kind === 'club' ? 'club' : ''));
+  box.append(section('Downloaded before the latest revision', cmp.stale.length, cmp.stale.length > 0, cmp.stale.length ? old : el('p', { class: 'note' }, 'Nothing is out of date.')));
+  if (r.unmatched.length) {
+    const ul = el('ul', { class: 'plain' });
+    for (const [t, c] of r.unmatched.slice(0, 40)) ul.append(el('li', {}, t + ' (seen ' + c + '×)'));
+    box.append(section('Read from the recording but not in your library', r.unmatched.length, false,
+      el('div', {}, el('p', { class: 'note' }, 'These could be playlists you have since removed from Yoto, or text that was misread.'), ul)));
+  }
+  box.hidden = false;
+  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 /* ---------- tech info + player probe ---------- */
@@ -492,7 +1010,7 @@ function cut(v, n) { const s = typeof v === 'string' ? v : JSON.stringify(v); re
 function techText() {
   return JSON.stringify({
     version: VERSION, callbackUsed: CONFIG.redirectUri, library: state.libInfo,
-    lastLoadError: state.loadError, players: state.probe
+    lastLoadError: state.loadError, players: state.probe, lastCheck: state.check.diag
   }, null, 2);
 }
 function openTech() { $('dbg').textContent = techText(); $('tech').hidden = false; }
@@ -506,7 +1024,7 @@ async function probePlayers() {
     out.devicesList = devices.map((d) => ({ name: d.name, id: d.deviceId, type: d.deviceType, family: d.deviceFamily, online: d.online, otherKeys: Object.keys(d) }));
     for (const d of devices) {
       const p = { name: d.name, calls: {} };
-      for (const path of ['config', 'status', 'downloads', 'content', 'library', 'cards']) {
+      for (const path of ['config', 'status']) {
         const label = '/device-v2/{id}/' + path;
         try {
           const data = await api('/device-v2/' + encodeURIComponent(d.deviceId) + '/' + path);
@@ -520,7 +1038,7 @@ async function probePlayers() {
     }
   } catch (e) {
     if (e.message === 'signin') { $('tech').hidden = true; showLogin('Please sign in again.'); return; }
-    out.error = e.message + (e.status === 403 || e.status === 401 ? ' (the app may need the device view permission ticked in the Yoto developer dashboard, then sign out and in again)' : '');
+    out.error = e.message;
   }
   state.probe = out;
   $('probeBtn').disabled = false;
@@ -541,22 +1059,23 @@ function wire() {
   $('search').addEventListener('input', (e) => { clearTimeout(timer); timer = setTimeout(() => { state.query = e.target.value; render(); }, 150); });
   $('search').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
   for (const b of document.querySelectorAll('.chip[data-tab]')) b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); });
+  for (const b of document.querySelectorAll('.chip[data-view]')) b.addEventListener('click', () => setView(b.dataset.view));
   $('sortSel').addEventListener('change', (e) => { state.sort = e.target.value; store('lc_sort', state.sort); render(); });
   $('since').addEventListener('change', (e) => { state.since = e.target.value; render(); });
   $('sinceClear').addEventListener('click', () => { state.since = ''; $('since').value = ''; render(); });
   $('csvBtn').addEventListener('click', downloadCsv);
   $('copyBtn').addEventListener('click', copyList);
   $('reloadBtn').addEventListener('click', async () => { toast('Reloading…'); try { await loadLibrary(); toast('Up to date'); } catch (e) { handleLoadError(e); } });
+  $('pickBtn').addEventListener('click', () => $('files').click());
+  $('files').addEventListener('change', (e) => { const f = Array.from(e.target.files || []); if (f.length) runCheck(f); });
+  $('cancelBtn').addEventListener('click', () => { state.check.cancel = true; $('cancelBtn').hidden = true; setProgress('Stopping…', null); });
   $('techBtn').addEventListener('click', openTech);
   $('techClose').addEventListener('click', () => { $('tech').hidden = true; });
   $('probeBtn').addEventListener('click', probePlayers);
-  $('copyDbg').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText($('dbg').textContent); toast('Copied'); }
-    catch (e) { const r = document.createRange(); r.selectNodeContents($('dbg')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Selected: press Copy'); }
-  });
+  $('copyDbg').addEventListener('click', () => copyText($('dbg').textContent, 'Copied'));
   $('signOut').addEventListener('click', () => {
     unstore('lc_tokens'); unstore('lc_library');
-    state.cards = []; $('tech').hidden = true; showLogin();
+    state.cards = []; state.devices = null; $('tech').hidden = true; showLogin();
   });
 }
 
