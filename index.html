@@ -216,7 +216,7 @@
 <script>
 'use strict';
 
-const VERSION = 'v2: library index plus Check a player';
+const VERSION = 'v2.1: library index plus Check a player';
 
 const CONFIG = {
   clientId: 'tpc_j3TNLEaMwAEHcDZBGtU5BZ',
@@ -230,6 +230,9 @@ const CONFIG = {
 };
 // Text reader (Tesseract.js), loaded only when a recording is checked. Default worker, core and language paths are used.
 const TESS_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+// Used only if the default language-data host does not answer.
+const LANG_FALLBACK = 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0_best_int';
+const TIMING = { scriptMs: 30000, readerMs: 60000 };
 
 const $ = (id) => document.getElementById(id);
 const state = {
@@ -750,10 +753,50 @@ async function loadDevices() {
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = src; s.onload = resolve;
-    s.onerror = () => reject(new Error("Couldn't load the text reader. It needs an internet connection."));
+    const timer = setTimeout(() => reject(new Error('The text reader is taking too long to download. Check the connection and try again.')), TIMING.scriptMs);
+    s.src = src;
+    s.onload = () => { clearTimeout(timer); resolve(); };
+    s.onerror = () => { clearTimeout(timer); reject(new Error("Couldn't load the text reader. It needs an internet connection.")); };
     document.head.append(s);
   });
+}
+function withTimeout(promise, ms, message) {
+  let timer;
+  const t = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); });
+  return Promise.race([promise, t]).finally(() => clearTimeout(timer));
+}
+const isPhone = () => { try { return matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } };
+// Starts the text reader (first worker with fallback and a time limit, extra workers on computers only).
+async function startReader(diag) {
+  const T = window.Tesseract;
+  const log = (s) => { diag.log.push(s); if (diag.log.length > 40) diag.log.shift(); };
+  const status = (m) => {
+    if (!m || !m.status) return;
+    diag.reader = m.status + (typeof m.progress === 'number' ? ' ' + Math.round(m.progress * 100) + '%' : '');
+    setProgress('Loading the text reader (first time only): ' + diag.reader, null);
+    if (typeof m.progress !== 'number' || m.progress === 0 || m.progress === 1) log(diag.reader);
+  };
+  let first = null;
+  for (const a of [{ label: 'default', opts: {} }, { label: 'jsdelivr', opts: { langPath: LANG_FALLBACK } }]) {
+    diag.readerAttempt = a.label;
+    try {
+      first = await withTimeout(T.createWorker('eng', 1, Object.assign({ logger: status }, a.opts)), TIMING.readerMs, 'timed out');
+      break;
+    } catch (e) { log('reader attempt "' + a.label + '" failed: ' + (e && e.message || e) + ' (last status: ' + diag.reader + ')'); }
+  }
+  if (!first) throw new Error("The text reader couldn't finish loading (stuck at: " + (diag.reader || 'starting') + '). Check the connection and try again, or try on a computer.');
+  const workers = [first];
+  const wanted = isPhone() ? 1 : Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 2) - 1));
+  while (workers.length < wanted) {
+    try { workers.push(await withTimeout(T.createWorker('eng', 1, {}), TIMING.readerMs, 'timed out')); } catch (e) { log('extra reader failed: ' + (e && e.message || e)); break; }
+  }
+  const scheduler = T.createScheduler();
+  for (const w of workers) {
+    try { await w.setParameters({ tessedit_pageseg_mode: '6' }); } catch (e) { /* default mode still works */ }
+    scheduler.addWorker(w);
+  }
+  diag.workers = workers.length;
+  return { scheduler, n: workers.length };
 }
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -833,11 +876,16 @@ async function runCheck(files) {
   checkError('');
   chk.running = true; chk.cancel = false;
   $('results').hidden = true; $('results').replaceChildren();
-  $('pickBtn').disabled = true; $('cancelBtn').hidden = false;
+  $('pickBtn').disabled = true; $('pickBtn').textContent = 'Working…'; $('cancelBtn').hidden = false;
   const index = buildIndex(state.cards);
   const memo = new Map();
   const entries = [];
-  const diag = { frames: 0, read: 0, skippedUnchanged: 0, files: files.map((f) => f.name + ' (' + Math.round(f.size / 1e6) + ' MB)') };
+  const diag = {
+    stage: 'starting', log: [], frames: 0, read: 0, skippedUnchanged: 0,
+    files: files.map((f) => f.name + ' (' + Math.round(f.size / 1e6) + ' MB)'),
+    device: { phone: isPhone(), cores: navigator.hardwareConcurrency || null, memoryGB: navigator.deviceMemory || null, browser: navigator.userAgent }
+  };
+  chk.diag = diag;
   let scheduler = null;
   try {
     // the player's shortcut list, if a player was chosen
@@ -850,15 +898,13 @@ async function runCheck(files) {
       catch (e) { if (e.message === 'signin') throw e; diag.shortcutError = e.message; }
     }
     setProgress('Loading the text reader…', 0);
+    diag.stage = 'downloading the text reader';
     if (!window.Tesseract) await loadScript(TESS_URL);
-    const T = window.Tesseract;
-    const n = Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 2) - 1));
-    scheduler = T.createScheduler();
-    for (let i = 0; i < n; i++) {
-      const w = await T.createWorker('eng');
-      try { await w.setParameters({ tessedit_pageseg_mode: '6' }); } catch (e) { /* default mode still works */ }
-      scheduler.addWorker(w);
-    }
+    diag.stage = 'starting the text reader';
+    const started = await startReader(diag);
+    scheduler = started.scheduler;
+    const n = started.n;
+    diag.stage = 'reading frames';
     let inflight = 0, lastFp = null;
     const readFrame = async (cv) => {
       while (inflight >= n + 1) await sleep(25);
@@ -870,7 +916,7 @@ async function runCheck(files) {
         .finally(() => { inflight--; });
     };
     const quickCount = () => matchEntries(entries, index, memo).found.size;
-    const STEP = 0.5;
+    const STEP = isPhone() ? 0.8 : 0.5;  // phones read more slowly, so look at fewer frames
     for (let fi = 0; fi < files.length && !chk.cancel; fi++) {
       const file = files[fi];
       const label = 'File ' + (fi + 1) + ' of ' + files.length + ': ';
@@ -921,7 +967,7 @@ async function runCheck(files) {
   } finally {
     if (scheduler) { try { await scheduler.terminate(); } catch (e) {} }
     chk.running = false;
-    $('pickBtn').disabled = false; $('cancelBtn').hidden = true;
+    $('pickBtn').disabled = false; $('pickBtn').textContent = 'Choose recording'; $('cancelBtn').hidden = true;
     $('files').value = '';
   }
 }
@@ -966,7 +1012,7 @@ function renderResults() {
   if (r.appCount) {
     const seen = r.found + r.unmatched.length;
     const n = el('p', { class: 'note' });
-    n.textContent = seen === r.appCount
+    n.textContent = (seen === r.appCount || r.found === r.appCount)
       ? 'The Yoto app says ' + r.appCount + ' and I found ' + seen + ', so every download was read. ✓'
       : 'The Yoto app says ' + r.appCount + ' but I found ' + seen + '. ' + (seen < r.appCount ? 'Some may have been scrolled past too fast, so a missing playlist below might actually be on the player. Try a slower recording.' : 'A few lines may have been read twice.');
     sum.append(n);
