@@ -216,7 +216,7 @@
 <script>
 'use strict';
 
-const VERSION = 'v2.1: library index plus Check a player';
+const VERSION = 'v2.3: library index plus Check a player';
 
 const CONFIG = {
   clientId: 'tpc_j3TNLEaMwAEHcDZBGtU5BZ',
@@ -232,7 +232,7 @@ const CONFIG = {
 const TESS_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
 // Used only if the default language-data host does not answer.
 const LANG_FALLBACK = 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0_best_int';
-const TIMING = { scriptMs: 30000, readerMs: 60000 };
+const TIMING = { scriptMs: 30000, readerMs: 60000, openMs: 25000, seekMs: 10000, stallMs: 20000, mode: '' };
 
 const $ = (id) => document.getElementById(id);
 const state = {
@@ -429,14 +429,14 @@ function buildIndex(cards) {
 }
 // Best library match for a normalised string, or null when unsure.
 function scoreAgainst(e, truncated, index) {
-  const eb = bigrams(e), el = e.length;
+  const eb = bigrams(e), len = e.length;
   const byId = new Map();
   const ranked = index.map((c) => ({ c, d: dice(eb, c.bg) })).sort((a, b) => b.d - a.d).slice(0, 8);
   for (const { c } of ranked) byId.set(c.id, { c, s: simRatio(e, c.n) });
   for (const c of index) {
     let s = 0;
-    if (el >= 8 && c.n.length > el && c.n.endsWith(e)) s = 0.9;           // top of a title scrolled off the screen
-    if (truncated && el >= 8 && c.n.startsWith(e)) s = Math.max(s, 0.95);  // "Long title..." shown with an ellipsis
+    if (len >= 8 && c.n.length > len && c.n.endsWith(e)) s = 0.9;           // top of a title scrolled off the screen
+    if (truncated && len >= 8 && c.n.startsWith(e)) s = Math.max(s, 0.95);  // "Long title..." shown with an ellipsis
     if (s > 0) { const cur = byId.get(c.id); if (!cur || s > cur.s) byId.set(c.id, { c, s }); }
   }
   const arr = Array.from(byId.values()).sort((a, b) => b.s - a.s);
@@ -836,11 +836,11 @@ function fpDiff(a, b) {
   return s / a.length;
 }
 function seekVideo(v, t) {
-  return new Promise((resolve) => {
+  return withTimeout(new Promise((resolve) => {
     const done = () => { v.removeEventListener('seeked', done); resolve(); };
     v.addEventListener('seeked', done);
     v.currentTime = t;
-  });
+  }), TIMING.seekMs, 'The browser would not jump to a point in the video.');
 }
 function loadImageFile(file) {
   return new Promise((resolve, reject) => {
@@ -851,14 +851,64 @@ function loadImageFile(file) {
     img.src = url;
   });
 }
+// The video sits in the page (tiny and almost invisible) because phone browsers will not load a video that is not on the page.
 function openVideoFile(file) {
+  const url = URL.createObjectURL(file);
+  const v = document.createElement('video');
+  v.muted = true; v.defaultMuted = true; v.playsInline = true; v.preload = 'auto';
+  v.setAttribute('playsinline', ''); v.setAttribute('muted', '');
+  v.style.cssText = 'position:fixed;left:0;top:0;width:4px;height:4px;opacity:0.02;pointer-events:none;z-index:-1';
+  const cleanup = () => {
+    try { v.pause(); } catch (e) {}
+    v.removeAttribute('src'); try { v.load(); } catch (e) {}
+    v.remove(); URL.revokeObjectURL(url);
+  };
+  const opened = new Promise((resolve, reject) => {
+    v.onloadedmetadata = () => resolve();
+    v.onerror = () => reject(new Error("This browser can't open " + file.name + '. Try Safari or Chrome, or use screenshots instead.'));
+  });
+  document.body.append(v);
+  v.src = url;
+  return withTimeout(opened, TIMING.openMs, 'The browser took too long to open ' + file.name + '. Try a shorter recording, or screenshots instead.')
+    .then(() => ({ v, cleanup }), (e) => { cleanup(); throw e; });
+}
+// Plays the video quietly and grabs frames as they appear, pausing whenever reading falls behind.
+function playThrough(v, step, grab, backlogHigh, isCancelled, onProgress) {
   return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const v = document.createElement('video');
-    v.muted = true; v.playsInline = true; v.preload = 'auto';
-    v.onloadeddata = () => resolve({ v, url });
-    v.onerror = () => { URL.revokeObjectURL(url); reject(new Error("This browser can't open " + file.name + '. Try Safari or Chrome, or use screenshots instead.')); };
-    v.src = url;
+    let last = -1e9, lastBeat = Date.now(), waiting = false, done = false;
+    const watch = setInterval(() => {
+      if (!done && !waiting && Date.now() - lastBeat > TIMING.stallMs) finish(new Error('The browser stopped giving frames from the video.'));
+    }, 1000);
+    const finish = (err) => { if (done) return; done = true; clearInterval(watch); try { v.pause(); } catch (e) {} if (err) reject(err); else resolve(); };
+    v.onended = () => finish();
+    v.onerror = () => finish(new Error('The video stopped playing.'));
+    const onFrame = async (now, meta) => {
+      if (done) return;
+      lastBeat = Date.now();
+      try {
+        if (isCancelled()) { finish(); return; }
+        if (meta.mediaTime - last >= step) {
+          last = meta.mediaTime;
+          grab(v);
+          onProgress(meta.mediaTime);
+          if (backlogHigh()) {
+            waiting = true; v.pause();
+            while (backlogHigh() && !isCancelled()) await sleep(30);
+            waiting = false; lastBeat = Date.now();
+            if (done) return;  // the video ended (or failed) while we waited: do not restart it
+            if (isCancelled()) { finish(); return; }
+            await v.play();
+          }
+        }
+        if (!done) v.requestVideoFrameCallback(onFrame);
+      } catch (e) { finish(e); }
+    };
+    v.requestVideoFrameCallback(onFrame);
+    v.playbackRate = 2;
+    v.play().catch((e) => {
+      if (e && e.name === 'AbortError' && (waiting || done)) return;  // our own pause cut the first play short; playback resumes after the wait
+      finish(new Error("The browser wouldn't play the video (" + ((e && e.name) || e) + ').'));
+    });
   });
 }
 
@@ -906,14 +956,17 @@ async function runCheck(files) {
     const n = started.n;
     diag.stage = 'reading frames';
     let inflight = 0, lastFp = null;
-    const readFrame = async (cv) => {
-      while (inflight >= n + 1) await sleep(25);
+    const readFrameNow = (cv) => {
       inflight++;
       scheduler.addJob('recognize', cv).then((r) => {
         diag.read++;
         for (const e of parseFrameText(r && r.data && r.data.text)) entries.push(e);
       }).catch((e) => { diag.readErrors = (diag.readErrors || 0) + 1; diag.lastReadError = String(e && e.message || e); })
         .finally(() => { inflight--; });
+    };
+    const readFrame = async (cv) => {
+      while (inflight >= n + 1) await sleep(25);
+      readFrameNow(cv);
     };
     const quickCount = () => matchEntries(entries, index, memo).found.size;
     const STEP = isPhone() ? 0.8 : 0.5;  // phones read more slowly, so look at fewer frames
@@ -928,25 +981,57 @@ async function runCheck(files) {
         setProgress(label + 'reading screenshot…', (fi + 1) / files.length * 100);
         continue;
       }
-      const { v, url } = await openVideoFile(file);
-      const dur = v.duration;
-      if (!isFinite(dur) || dur <= 0) throw new Error("Couldn't read the length of " + file.name + '.');
-      const total = Math.floor(dur / STEP);
-      let step = 0;
-      for (let t = 0.1; t < dur && !chk.cancel; t += STEP, step++) {
-        await seekVideo(v, t);
-        const cv = cropForReading(v, v.videoWidth, v.videoHeight);
-        diag.frames++;
-        const fp = fingerprint(cv);
-        if (fpDiff(fp, lastFp) < 1.5) { diag.skippedUnchanged++; }
-        else { lastFp = fp; await readFrame(cv); }
-        if (step % 6 === 0) {
-          setProgress(label + Math.round(Math.min(100, step / total * 100)) + '%  ·  ' + quickCount() + ' playlists found so far',
-            (fi + Math.min(1, step / total)) / files.length * 100);
-          await sleep(0);
+      while (inflight > 0 && !chk.cancel) await sleep(40);  // finish reading the previous file before starting the next
+      diag.stage = 'opening the video';
+      setProgress(label + 'opening the video…', null);
+      const opened = await openVideoFile(file);
+      const v = opened.v;
+      try {
+        const dur = v.duration;
+        if (!isFinite(dur) || dur <= 0) throw new Error("Couldn't read the length of " + file.name + '.');
+        diag.videoSeconds = Math.round(dur);
+        // next frame to read, or null when it is the same as the last one read
+        const grab = (src) => {
+          diag.frames++;
+          const cv = cropForReading(src, src.videoWidth, src.videoHeight);
+          const fp = fingerprint(cv);
+          if (fpDiff(fp, lastFp) < 1.5) { diag.skippedUnchanged++; return null; }
+          lastFp = fp; return cv;
+        };
+        const tick = (share) => setProgress(label + Math.round(Math.min(1, share) * 100) + '%  ·  ' + quickCount() + ' playlists found so far',
+          (fi + Math.min(1, share)) / files.length * 100);
+        let mode = TIMING.mode || (isPhone() && 'requestVideoFrameCallback' in HTMLVideoElement.prototype ? 'play' : 'seek');
+        let startAt = 0.1;
+        diag.videoMode = '';
+        diag.stage = 'reading frames';
+        if (mode === 'play') {
+          // phones: play the video and grab frames as they appear (jumping around in a long video is unreliable there)
+          diag.videoMode = 'play';
+          let k = 0;
+          try {
+            await playThrough(v, STEP, (src) => { const cv = grab(src); if (cv) readFrameNow(cv); },
+              () => inflight >= n + 1, () => chk.cancel, (t) => { if (k++ % 3 === 0) tick(t / dur); });
+          } catch (e) {
+            // playing broke: carry on by jumping through the rest of the video from where it stopped
+            diag.playError = e.message;
+            startAt = Math.max(0.1, (v.currentTime || 0) - STEP);
+            mode = 'seek';
+          }
         }
+        if (mode === 'seek') {
+          diag.videoMode = (diag.videoMode ? diag.videoMode + ' then ' : '') + 'seek';
+          const total = Math.max(1, Math.floor((dur - startAt) / STEP));
+          let step = 0;
+          for (let t = startAt; t < dur && !chk.cancel; t += STEP, step++) {
+            await seekVideo(v, t);
+            const cv = grab(v);
+            if (cv) await readFrame(cv);
+            if (step % 6 === 0) { tick(step / total); await sleep(0); }
+          }
+        }
+      } finally {
+        opened.cleanup();
       }
-      URL.revokeObjectURL(url);
     }
     while (inflight > 0) await sleep(40);
     if (chk.cancel) { setProgress('Stopped.', null); return; }
@@ -1013,7 +1098,7 @@ function renderResults() {
     const seen = r.found + r.unmatched.length;
     const n = el('p', { class: 'note' });
     n.textContent = (seen === r.appCount || r.found === r.appCount)
-      ? 'The Yoto app says ' + r.appCount + ' and I found ' + seen + ', so every download was read. ✓'
+      ? 'The Yoto app says ' + r.appCount + ' and I matched ' + r.found + ', so every download was read. ✓'
       : 'The Yoto app says ' + r.appCount + ' but I found ' + seen + '. ' + (seen < r.appCount ? 'Some may have been scrolled past too fast, so a missing playlist below might actually be on the player. Try a slower recording.' : 'A few lines may have been read twice.');
     sum.append(n);
   }
