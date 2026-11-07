@@ -104,10 +104,10 @@
   details.sec .count { color: var(--soft); font-weight: 700; }
   .plain { margin: 0; padding: 0 0 0 1.1rem; color: var(--soft); line-height: 1.5; font-size: .92rem; }
 
-  #tech, #copybox { position: fixed; inset: 0; background: rgba(30,20,50,.55); z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px; }
-  #tech .box, #copybox .box { background: #fff; border-radius: 22px; padding: 20px; width: 100%; max-width: 640px; max-height: 92vh; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
-  #tech h2, #copybox h2 { margin: 0; }
-  #tech p, #copybox p { margin: 0; color: var(--soft); line-height: 1.45; }
+  #tech { position: fixed; inset: 0; background: rgba(30,20,50,.55); z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #tech .box { background: #fff; border-radius: 22px; padding: 20px; width: 100%; max-width: 640px; max-height: 92vh; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+  #tech h2 { margin: 0; }
+  #tech p { margin: 0; color: var(--soft); line-height: 1.45; }
   #dbg { background: #f4f0fa; padding: 10px; border-radius: 10px; font-size: .72rem; overflow: auto; max-height: 45vh; white-space: pre-wrap; word-break: break-all; user-select: text; -webkit-user-select: text; margin: 0; }
 </style>
 </head>
@@ -216,7 +216,7 @@
 <script>
 'use strict';
 
-const VERSION = 'v2.4: library index plus Check a player';
+const VERSION = 'v2.3: library index plus Check a player';
 
 const CONFIG = {
   clientId: 'tpc_j3TNLEaMwAEHcDZBGtU5BZ',
@@ -716,42 +716,14 @@ function saveCsvFile(text, name, count) {
   document.body.append(a); a.click(); a.remove();
   toast('Saved ' + count + ' rows');
 }
-// Briefly changes a button's label so a tap visibly did something (a toast at the bottom of a long page is easy to miss).
-function flashButton(btn, label) {
-  if (!btn) return;
-  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
-  btn.textContent = label;
-  clearTimeout(btn._flash);
-  btn._flash = setTimeout(() => { btn.textContent = btn.dataset.label; }, 2000);
-}
-// Last resort when the browser refuses to copy: show the text in a box to select by hand.
-function showCopyBox(text) {
-  const ta = el('textarea', { readonly: '', rows: '8', style: 'width:100%;font-size:16px;border:2px solid #f3d3a8;border-radius:12px;padding:8px' });
-  ta.value = text;
-  const close = el('button', { class: 'btn' }, 'Close');
-  const wrap = el('div', { id: 'copybox' }, el('div', { class: 'box' },
-    el('h2', {}, 'Copy this list'),
-    el('p', {}, "Your browser wouldn't copy it automatically. Tap and hold in the box, choose Select All, then Copy."),
-    ta, el('div', { class: 'row' }, close)));
-  close.addEventListener('click', () => wrap.remove());
-  document.body.append(wrap);
-  ta.focus(); ta.select();
-  try { ta.setSelectionRange(0, text.length); } catch (e) {}
-}
-async function copyText(text, okMessage, btn) {
-  let ok = false;
-  try {
-    await Promise.race([navigator.clipboard.writeText(text), sleep(2500).then(() => { throw new Error('clipboard timed out'); })]);
-    ok = true;
-  } catch (e) {
-    const ta = el('textarea', { style: 'position:fixed;left:0;top:0;opacity:0;font-size:16px' }); ta.value = text;
-    document.body.append(ta); ta.focus(); ta.select();
-    try { ta.setSelectionRange(0, text.length); } catch (e2) {}
-    try { ok = document.execCommand('copy'); } catch (e2) {}
-    ta.remove();
+async function copyText(text, okMessage) {
+  try { await navigator.clipboard.writeText(text); toast(okMessage); }
+  catch (e) {
+    const ta = el('textarea', { style: 'position:fixed;opacity:0' }); ta.value = text;
+    document.body.append(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e2) {}
+    ta.remove(); toast(ok ? okMessage : 'Could not copy');
   }
-  if (ok) { toast(okMessage); flashButton(btn, 'Copied ✓'); } else showCopyBox(text);
-  return ok;
 }
 function downloadCsv() {
   const list = currentList();
@@ -761,7 +733,7 @@ function downloadCsv() {
 function copyList() {
   const list = currentList();
   if (!list.length) { toast('Nothing to copy'); return; }
-  copyText(buildCsv(list), 'Copied ' + list.length + ' rows', $('copyBtn'));
+  copyText(buildCsv(list), 'Copied ' + list.length + ' rows');
 }
 
 /* ---------- check a player ---------- */
@@ -775,7 +747,7 @@ async function loadDevices() {
     if (e.message === 'signin') { showLogin('Please sign in again.'); return; }
     state.devices = [];
   }
-  sel.replaceChildren(el('option', { value: '' }, state.devices.length ? 'Choose a player…' : "Couldn't load players (green button playlists won't be checked)"));
+  sel.replaceChildren(el('option', { value: '' }, state.devices.length ? 'Choose a player…' : "Couldn't load players (shortcuts won't be checked)"));
   for (const d of state.devices) sel.append(el('option', { value: d.id }, d.name));
 }
 function loadScript(src) {
@@ -1102,7 +1074,7 @@ function section(title, count, open, body) {
   return d;
 }
 function resultsCsv(r) {
-  const lines = [['Status', 'Title', 'Tab', 'Last revised', 'Downloaded on player', 'Green button', 'Card ID'].map(csvCell).join(',')];
+  const lines = [['Status', 'Title', 'Tab', 'Last revised', 'Downloaded on player', 'Shortcut', 'Card ID'].map(csvCell).join(',')];
   const sc = new Set(r.shortcutIds);
   const add = (status, c, dl) => lines.push([status, c.title, c.kind === 'club' ? 'Club' : 'My Cards', isoDate(c.rev), dl || '', sc.has(c.id) ? 'yes' : '', c.id].map(csvCell).join(','));
   for (const c of r.cmp.missing) add('Missing', c, '');
@@ -1133,10 +1105,7 @@ function renderResults() {
   if (cmp.same.length) sum.append(el('p', { class: 'note' }, cmp.same.length + ' were downloaded on the same day they were last revised. The app only shows the day, so I can\'t tell which came first.'));
   const row = el('div', { class: 'row' });
   const bCopy = el('button', { class: 'btn' }, 'Copy missing list');
-  bCopy.addEventListener('click', () => {
-    if (!cmp.missing.length) { toast('Nothing is missing'); return; }
-    copyText(cmp.missing.map((c) => c.title).join('\n'), 'Copied ' + cmp.missing.length + ' titles', bCopy);
-  });
+  bCopy.addEventListener('click', () => copyText(cmp.missing.map((c) => c.title).join('\n'), 'Copied ' + cmp.missing.length + ' titles'));
   const bCsv = el('button', { class: 'btn' }, 'Download CSV');
   bCsv.addEventListener('click', () => saveCsvFile(resultsCsv(r), 'yoto-player-check-' + isoDate(Date.now()) + '.csv', cmp.missing.length + cmp.stale.length));
   row.append(bCopy, bCsv);
@@ -1148,15 +1117,15 @@ function renderResults() {
     const rows = el('ul', { class: 'rows' });
     for (const c of cmp.shortcutMissing) rows.append(resultRow(c, 'Not on the player · revised <b>' + esc(niceDate(c.rev)) + '</b>', 'MISSING', 'warn'));
     for (const x of cmp.shortcutStale) rows.append(resultRow(x.card, 'Downloaded <b>' + esc(niceIso(x.downloaded)) + '</b> · revised <b>' + esc(niceIso(x.revised)) + '</b>', 'OLD', 'warn'));
-    const body = sc ? rows : el('p', { class: 'note' }, 'All ' + r.shortcutIds.length + ' green button playlists are on the player and up to date.');
-    box.append(section("Green Button playlists that haven't actually downloaded to the player", sc, sc > 0, body));
+    const body = sc ? rows : el('p', { class: 'note' }, 'All ' + r.shortcutIds.length + ' shortcut playlists are on the player and up to date.');
+    box.append(section('Shortcut playlists that need attention', sc, sc > 0, body));
   }
   const miss = el('ul', { class: 'rows' });
   for (const c of cmp.missing) miss.append(resultRow(c, 'Revised <b>' + esc(niceDate(c.rev)) + '</b>' + (STREAMING.test(c.title) ? ' · this one may stream rather than download' : ''), c.kind === 'club' ? 'CLUB' : 'MINE', c.kind === 'club' ? 'club' : ''));
-  box.append(section('Playlists missing/not actually downloaded to the player:', cmp.missing.length, cmp.missing.length > 0, cmp.missing.length ? miss : el('p', { class: 'note' }, 'Nothing is missing.')));
+  box.append(section('Missing from the player', cmp.missing.length, cmp.missing.length > 0, cmp.missing.length ? miss : el('p', { class: 'note' }, 'Nothing is missing.')));
   const old = el('ul', { class: 'rows' });
   for (const x of cmp.stale) old.append(resultRow(x.card, 'Downloaded <b>' + esc(niceIso(x.downloaded)) + '</b> · revised <b>' + esc(niceIso(x.revised)) + '</b>', x.card.kind === 'club' ? 'CLUB' : 'MINE', x.card.kind === 'club' ? 'club' : ''));
-  box.append(section("Playlists where the most recent revision hasn't downloaded to the player (meaning they won't play off Wi-Fi either)", cmp.stale.length, cmp.stale.length > 0, cmp.stale.length ? old : el('p', { class: 'note' }, 'Nothing is out of date.')));
+  box.append(section('Downloaded before the latest revision', cmp.stale.length, cmp.stale.length > 0, cmp.stale.length ? old : el('p', { class: 'note' }, 'Nothing is out of date.')));
   if (r.unmatched.length) {
     const ul = el('ul', { class: 'plain' });
     for (const [t, c] of r.unmatched.slice(0, 40)) ul.append(el('li', {}, t + ' (seen ' + c + '×)'));
@@ -1234,7 +1203,7 @@ function wire() {
   $('techBtn').addEventListener('click', openTech);
   $('techClose').addEventListener('click', () => { $('tech').hidden = true; });
   $('probeBtn').addEventListener('click', probePlayers);
-  $('copyDbg').addEventListener('click', () => copyText($('dbg').textContent, 'Copied', $('copyDbg')));
+  $('copyDbg').addEventListener('click', () => copyText($('dbg').textContent, 'Copied'));
   $('signOut').addEventListener('click', () => {
     unstore('lc_tokens'); unstore('lc_library');
     state.cards = []; state.devices = null; $('tech').hidden = true; showLogin();
