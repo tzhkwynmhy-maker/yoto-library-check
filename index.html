@@ -227,7 +227,7 @@
 <script>
 'use strict';
 
-const VERSION = 'v2.7: library index plus Check a player';
+const VERSION = 'v2.8: library index plus Check a player';
 
 // Optional anonymous visit counter (GoatCounter). Put your GoatCounter site code here, e.g. 'yoto-library-check'. Leave empty for no counter.
 const GOATCOUNTER_CODE = '';
@@ -509,7 +509,7 @@ function matchEntries(entries, index, memo) {
   return { found, unmatched };
 }
 // Podcasts and radio stations stream from the internet; they are not meant to download to the player.
-const STREAMING = /^yoto (daily|radio|sleep radio|dreams)\b|\bpodcast\b|\bradio\b/i;
+const STREAMING = /^yoto (daily|radio|sleep radio|dreams)\b/i;  // Yoto's own streaming cards; everything else goes by the card's category
 function isStreaming(c) { return !!c && (STREAMING.test(c.title || '') || /podcast|radio/i.test(c.cat || '')); }
 // Which library playlists are on the player, missing, or downloaded before they were last revised.
 function compareToLibrary(cards, found, shortcutIds) {
@@ -1207,7 +1207,7 @@ function renderResults() {
   }
   const old = el('ul', { class: 'rows' });
   for (const x of cmp.stale) old.append(resultRow(x.card, 'Downloaded <b>' + esc(niceIso(x.downloaded)) + '</b> · revised <b>' + esc(niceIso(x.revised)) + '</b>', x.card.kind === 'club' ? 'CLUB' : 'MINE', x.card.kind === 'club' ? 'club' : ''));
-  box.append(section("Playlists where the most recent revision hasn't downloaded to the player (meaning they won't play off Wi-Fi either)", cmp.stale.length, cmp.stale.length > 0, cmp.stale.length ? old : el('p', { class: 'note' }, 'Nothing is out of date.')));
+  box.append(section("Playlists where the most recent revision hasn't downloaded to the player (meaning they won't play if not connected to Wi-Fi)", cmp.stale.length, cmp.stale.length > 0, cmp.stale.length ? old : el('p', { class: 'note' }, 'Nothing is out of date.')));
   if (r.unmatched.length) {
     const ul = el('ul', { class: 'plain' });
     for (const [t, c] of r.unmatched.slice(0, 40)) ul.append(el('li', {}, t + ' (seen ' + c + '×)'));
