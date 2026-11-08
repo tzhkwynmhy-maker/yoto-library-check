@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Privacy: Yoto Library Check</title>
+<style>
+  :root { --bg: #fff4e0; --ink: #2b2340; --soft: #6d6486; --accent: #e4553f; --card: #ffffff; --line: #f3d3a8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1d1a2b; --ink: #f2ecff; --soft: #b9b0d0; --accent: #ff8a76; --card: #2a2640; --line: #4a4468; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+         padding: 20px 16px calc(32px + env(safe-area-inset-bottom)); }
+  main { max-width: 640px; margin: 0 auto; background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 22px 20px; }
+  h1 { margin: 0 0 4px; font-size: 1.5rem; }
+  h2 { margin: 22px 0 6px; font-size: 1.1rem; }
+  p, li { color: var(--ink); }
+  ul { padding-left: 1.2rem; margin: 6px 0; }
+  .soft { color: var(--soft); font-size: .9rem; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Privacy: Yoto Library Check</h1>
+  <p class="soft">Last updated 8 November 2026. <a href="./">Back to the app</a></p>
+
+  <p>Yoto Library Check is a small independent hobby project. It is not made by, or connected to, Yoto. This page says what the app does with your information, in plain words.</p>
+
+  <h2>The short version</h2>
+  <ul>
+    <li>The app has no server and no database. I (the developer) never receive your playlists, your account details or your recordings.</li>
+    <li>Everything happens in your own browser.</li>
+    <li>The app can only <b>view</b> things in your Yoto account. It cannot play, change, add or delete anything.</li>
+  </ul>
+
+  <h2>What the app asks Yoto for</h2>
+  <p>When you sign in, Yoto asks you to allow view-only access to:</p>
+  <ul>
+    <li>your family library: playlist titles, cover images, card IDs and the dates they were added and last revised;</li>
+    <li>your players: their names and shortcut (green button) settings;</li>
+    <li>staying signed in, so you don't have to sign in again each visit.</li>
+  </ul>
+  <p>You type your Yoto password only on Yoto's own sign-in page (login.yotoplay.com), never in this app. The app talks to Yoto directly from your browser.</p>
+
+  <h2>What is saved on your device</h2>
+  <p>The app saves a few things in your browser's local storage, only on your device: your sign-in tokens, a copy of your library list (so it opens quickly), and your chosen sort order. Using <b>Sign out</b> (in Tech info) removes the tokens and the library copy. Clearing the site's data in your browser removes everything.</p>
+
+  <h2>Your recordings and screenshots</h2>
+  <p>When you use "Check a player", the video or screenshots you pick are read on your device by a text-reading tool. They are not uploaded anywhere, and the app does not keep them after the check finishes.</p>
+
+  <h2>Other services involved</h2>
+  <ul>
+    <li><b>Yoto</b> (login.yotoplay.com and api.yotoplay.com) handles sign-in and supplies your library. Yoto's own privacy policy applies to that.</li>
+    <li><b>jsDelivr</b> (cdn.jsdelivr.net) supplies the text-reading tool (Tesseract.js) and its English language data when you run a check. Like any website, it can see technical details such as your IP address when your browser asks for those files. No account information is sent.</li>
+    <li><b>GitHub Pages</b> hosts this app. GitHub may keep ordinary web-server logs under its own privacy statement.</li>
+  </ul>
+
+  <p id="counter" hidden>The app uses GoatCounter to count visits. It records anonymous page views only: no cookies, no tracking across sites, and no information from your Yoto account.</p>
+
+  <h2>Questions or problems</h2>
+  <p>Please open an issue at <a href="https://github.com/tzhkwynmhy-maker/yoto-library-check/issues">github.com/tzhkwynmhy-maker/yoto-library-check/issues</a>.</p>
+</main>
+</body>
+</html>

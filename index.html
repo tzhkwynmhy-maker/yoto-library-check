@@ -119,6 +119,15 @@
   <button id="loginBtn" class="primary">Sign in with Yoto</button>
   <p id="loginErr" class="err" hidden></p>
   <p style="font-size:.9rem">🔒 You sign in on Yoto's own website. This page can only view; it cannot change anything in your account.</p>
+  <details style="font-size:.9rem;color:var(--soft)" open>
+    <summary>What to expect when you sign in</summary>
+    <p>Yoto will show a warning that it can't verify this app. That is normal for a small independent app that hasn't been through Yoto's review. Please check that:</p>
+    <ul class="plain">
+      <li>the address on the sign-in page is <b>login.yotoplay.com</b>;</li>
+      <li>the access listed is <b>view only</b>: your playlists, your players' settings, and staying signed in.</li>
+    </ul>
+    <p>The app cannot play, change, add or delete anything. Your recordings never leave your device. <a href="privacy.html">Privacy details</a></p>
+  </details>
   <details style="font-size:.9rem;color:var(--soft)">
     <summary>Set-up note</summary>
     <p>This page's address is <code id="redirectShow"></code><br>It must be listed under "Allowed Callback URLs" in the Yoto developer app.</p>
@@ -212,12 +221,22 @@
     <pre id="dbg"></pre>
   </div>
 </div>
+<p class="note" id="footer" style="text-align:center;margin:18px 0"><a href="privacy.html">Privacy</a></p>
 <div id="toast" hidden></div>
 
 <script>
 'use strict';
 
-const VERSION = 'v2.5: library index plus Check a player';
+const VERSION = 'v2.6: library index plus Check a player';
+
+// Optional anonymous visit counter (GoatCounter). Put your GoatCounter site code here, e.g. 'yoto-library-check'. Leave empty for no counter.
+const GOATCOUNTER_CODE = '';
+if (GOATCOUNTER_CODE) {
+  const gc = document.createElement('script');
+  gc.async = true; gc.src = 'https://gc.zgo.at/count.js';
+  gc.setAttribute('data-goatcounter', 'https://' + GOATCOUNTER_CODE + '.goatcounter.com/count');
+  document.head.append(gc);
+}
 
 const CONFIG = {
   clientId: 'tpc_j3TNLEaMwAEHcDZBGtU5BZ',
@@ -1014,7 +1033,7 @@ async function runCheck(files) {
       readFrameNow(cv);
     };
     const quickCount = () => matchEntries(entries, index, memo).found.size;
-    const STEP = isPhone() ? 0.8 : 0.5;  // phones read more slowly, so look at fewer frames
+    const STEP = isPhone() ? 0.55 : 0.4;  // look often, so a fast scroll does not skip a row (unchanged frames are skipped cheaply)
     for (let fi = 0; fi < files.length && !chk.cancel; fi++) {
       const file = files[fi];
       const label = 'File ' + (fi + 1) + ' of ' + files.length + ': ';
@@ -1043,7 +1062,7 @@ async function runCheck(files) {
           if (fpDiff(fp, lastFp) < 1.5) { diag.skippedUnchanged++; return null; }
           lastFp = fp; return cv;
         };
-        const tick = (share) => setProgress(label + Math.round(Math.min(1, share) * 100) + '%  ·  ' + quickCount() + ' playlists found so far',
+        const tick = (share) => $('tapBtn').hidden && setProgress(label + Math.round(Math.min(1, share) * 100) + '%  ·  ' + quickCount() + ' playlists found so far',
           (fi + Math.min(1, share)) / files.length * 100);
         let mode = TIMING.mode || (isPhone() && 'requestVideoFrameCallback' in HTMLVideoElement.prototype ? 'play' : 'seek');
         let startAt = 0.1;
