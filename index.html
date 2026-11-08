@@ -227,7 +227,7 @@
 <script>
 'use strict';
 
-const VERSION = 'v2.6: library index plus Check a player';
+const VERSION = 'v2.7: library index plus Check a player';
 
 // Optional anonymous visit counter (GoatCounter). Put your GoatCounter site code here, e.g. 'yoto-library-check'. Leave empty for no counter.
 const GOATCOUNTER_CODE = '';
@@ -326,6 +326,7 @@ function cardsFrom(items) {
       id, title: c.title || 'Untitled',
       cover: (c.metadata && c.metadata.cover && c.metadata.cover.imageL) || null,
       kind: isClub(item) ? 'club' : 'mine',
+      cat: (c.metadata && typeof c.metadata.category === 'string') ? c.metadata.category : '',
       added: tsOf(item.addedAt, item.createdAt, c.createdAt),
       rev, revFrom
     };
@@ -507,14 +508,17 @@ function matchEntries(entries, index, memo) {
   }
   return { found, unmatched };
 }
-const STREAMING = /^yoto (daily|radio|sleep radio)\b/i;
+// Podcasts and radio stations stream from the internet; they are not meant to download to the player.
+const STREAMING = /^yoto (daily|radio|sleep radio|dreams)\b|\bpodcast\b|\bradio\b/i;
+function isStreaming(c) { return !!c && (STREAMING.test(c.title || '') || /podcast|radio/i.test(c.cat || '')); }
 // Which library playlists are on the player, missing, or downloaded before they were last revised.
 function compareToLibrary(cards, found, shortcutIds) {
-  const missing = [], stale = [], same = [], present = [];
+  const missing = [], stale = [], same = [], present = [], streaming = [];
   for (const c of cards) {
     const f = found.get(c.id);
-    if (!f) { missing.push(c); continue; }
+    if (!f) { (isStreaming(c) ? streaming : missing).push(c); continue; }
     present.push(c);
+    if (isStreaming(c)) continue;
     const rev = isoDate(c.rev);
     if (f.date && rev) {
       if (f.date < rev) stale.push({ card: c, downloaded: f.date, revised: rev });
@@ -523,10 +527,10 @@ function compareToLibrary(cards, found, shortcutIds) {
   }
   const sc = new Set(shortcutIds || []);
   return {
-    present, missing, stale, same,
+    present, missing, stale, same, streaming,
     shortcutMissing: missing.filter((c) => sc.has(c.id)),
     shortcutStale: stale.filter((x) => sc.has(x.card.id)),
-    streamingMissing: missing.filter((c) => STREAMING.test(c.title))
+    shortcutStreaming: cards.filter((c) => sc.has(c.id) && isStreaming(c))
   };
 }
 // The playlists named in a player's day/night shortcut lists and button shortcuts.
@@ -715,6 +719,8 @@ async function loadLibrary() {
     familyLibraryItems: items.length,
     uniquePlaylists: state.cards.length,
     revisedDateTakenFrom: revSources,
+    categoriesSeen: state.cards.reduce((m, c) => { const k = c.cat || '(none)'; m[k] = (m[k] || 0) + 1; return m; }, {}),
+    treatedAsStreaming: state.cards.filter(isStreaming).map((c) => c.title + (c.cat ? ' [' + c.cat + ']' : '')),
     firstItemKeys: first ? Object.keys(first) : null,
     firstCardKeys: first && first.card ? Object.keys(first.card) : null,
     firstItemDates: first ? { addedAt: first.addedAt, createdAt: first.createdAt, updatedAt: first.updatedAt, cardUpdatedAt: first.card && first.card.updatedAt, cardCreatedAt: first.card && first.card.createdAt } : null,
@@ -821,7 +827,7 @@ async function startReader(diag) {
   const status = (m) => {
     if (!m || !m.status) return;
     diag.reader = m.status + (typeof m.progress === 'number' ? ' ' + Math.round(m.progress * 100) + '%' : '');
-    setProgress('Loading the text reader (first time only): ' + diag.reader, null);
+    if (!diag.readerReady) setProgress('Getting ready to read the video…' + (typeof m.progress === 'number' ? ' ' + Math.round(m.progress * 100) + '%' : ''), null);
     if (typeof m.progress !== 'number' || m.progress === 0 || m.progress === 1) log(diag.reader);
   };
   let first = null;
@@ -844,6 +850,7 @@ async function startReader(diag) {
     scheduler.addWorker(w);
   }
   diag.workers = workers.length;
+  diag.readerReady = true;
   return { scheduler, n: workers.length };
 }
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -1143,6 +1150,7 @@ function resultsCsv(r) {
   const add = (status, c, dl) => lines.push([status, c.title, c.kind === 'club' ? 'Club' : 'My Cards', isoDate(c.rev), dl || '', sc.has(c.id) ? 'yes' : '', c.id].map(csvCell).join(','));
   for (const c of r.cmp.missing) add('Missing', c, '');
   for (const x of r.cmp.stale) add('Out of date', x.card, x.downloaded);
+  for (const c of r.cmp.streaming) add('Podcast or radio (streams, does not download)', c, '');
   return lines.join('\n');
 }
 function renderResults() {
@@ -1150,11 +1158,11 @@ function renderResults() {
   const box = $('results');
   box.replaceChildren();
   if (!r) { box.hidden = true; return; }
-  const cmp = r.cmp, total = state.cards.length;
+  const cmp = r.cmp, total = state.cards.length - cmp.streaming.length;
   const sum = el('div', { class: 'panel' });
   const who = r.playerName ? r.playerName + ' has' : 'This player has';
   const p = el('p', { class: 'summary' });
-  p.innerHTML = esc(who) + ' <span class="good">' + cmp.present.length + '</span> of your ' + total + ' playlists. '
+  p.innerHTML = esc(who) + ' <span class="good">' + cmp.present.length + '</span> of your ' + total + ' playlists' + (cmp.streaming.length ? ' that can download' : '') + '. '
     + '<span class="' + (cmp.missing.length ? 'bad' : 'good') + '">' + cmp.missing.length + ' missing</span>, '
     + '<span class="' + (cmp.stale.length ? 'bad' : 'good') + '">' + cmp.stale.length + ' out of date</span>.';
   sum.append(p);
@@ -1166,7 +1174,7 @@ function renderResults() {
       : 'The Yoto app says ' + r.appCount + ' but I found ' + seen + '. ' + (seen < r.appCount ? 'Some may have been scrolled past too fast, so a missing playlist below might actually be on the player. Try a slower recording.' : 'A few lines may have been read twice.');
     sum.append(n);
   }
-  if (cmp.same.length) sum.append(el('p', { class: 'note' }, cmp.same.length + ' were downloaded on the same day they were last revised. The app only shows the day, so I can\'t tell which came first.'));
+  if (cmp.streaming.length) sum.append(el('p', { class: 'note' }, cmp.streaming.length + ' podcasts and radio stations are listed separately below, because they stream and are not meant to download.'));
   const row = el('div', { class: 'row' });
   const bCopy = el('button', { class: 'btn' }, 'Copy missing list');
   bCopy.addEventListener('click', () => {
@@ -1184,12 +1192,19 @@ function renderResults() {
     const rows = el('ul', { class: 'rows' });
     for (const c of cmp.shortcutMissing) rows.append(resultRow(c, 'Not on the player · revised <b>' + esc(niceDate(c.rev)) + '</b>', 'MISSING', 'warn'));
     for (const x of cmp.shortcutStale) rows.append(resultRow(x.card, 'Downloaded <b>' + esc(niceIso(x.downloaded)) + '</b> · revised <b>' + esc(niceIso(x.revised)) + '</b>', 'OLD', 'warn'));
-    const body = sc ? rows : el('p', { class: 'note' }, 'All ' + r.shortcutIds.length + ' green button playlists are on the player and up to date.');
+    const body = sc ? rows : el('p', { class: 'note' }, 'All ' + Math.max(0, r.shortcutIds.length - cmp.shortcutStreaming.length) + ' green button playlists that can download are on the player and up to date.');
     box.append(section("Green Button playlists that haven't actually downloaded to the player", sc, sc > 0, body));
   }
   const miss = el('ul', { class: 'rows' });
-  for (const c of cmp.missing) miss.append(resultRow(c, 'Revised <b>' + esc(niceDate(c.rev)) + '</b>' + (STREAMING.test(c.title) ? ' · this one may stream rather than download' : ''), c.kind === 'club' ? 'CLUB' : 'MINE', c.kind === 'club' ? 'club' : ''));
+  for (const c of cmp.missing) miss.append(resultRow(c, 'Revised <b>' + esc(niceDate(c.rev)) + '</b>' + '', c.kind === 'club' ? 'CLUB' : 'MINE', c.kind === 'club' ? 'club' : ''));
   box.append(section('Playlists missing/not actually downloaded to the player:', cmp.missing.length, cmp.missing.length > 0, cmp.missing.length ? miss : el('p', { class: 'note' }, 'Nothing is missing.')));
+  if (cmp.streaming.length) {
+    const st = el('ul', { class: 'rows' });
+    const scs = new Set(r.shortcutIds);
+    for (const c of cmp.streaming) st.append(resultRow(c, 'Streams from the internet' + (scs.has(c.id) ? ' · on a green button' : ''), 'STREAMS', ''));
+    box.append(section("Podcasts and radio stations (these stream, so they don't download to the player)", cmp.streaming.length, false,
+      el('div', {}, el('p', { class: 'note' }, "These are expected to be missing from the player's download list. They need Wi-Fi to play."), st)));
+  }
   const old = el('ul', { class: 'rows' });
   for (const x of cmp.stale) old.append(resultRow(x.card, 'Downloaded <b>' + esc(niceIso(x.downloaded)) + '</b> · revised <b>' + esc(niceIso(x.revised)) + '</b>', x.card.kind === 'club' ? 'CLUB' : 'MINE', x.card.kind === 'club' ? 'club' : ''));
   box.append(section("Playlists where the most recent revision hasn't downloaded to the player (meaning they won't play off Wi-Fi either)", cmp.stale.length, cmp.stale.length > 0, cmp.stale.length ? old : el('p', { class: 'note' }, 'Nothing is out of date.')));
