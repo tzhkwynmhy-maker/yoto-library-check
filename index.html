@@ -104,6 +104,9 @@
   details.sec .count { color: var(--soft); font-weight: 700; }
   .plain { margin: 0; padding: 0 0 0 1.1rem; color: var(--soft); line-height: 1.5; font-size: .92rem; }
 
+  .foot { text-align: center; margin: 22px 0 8px; }
+  .linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-dark); text-decoration: underline; cursor: pointer; }
+  #savedBar { margin: 0 0 10px; }
   #tech, #copybox { position: fixed; inset: 0; background: rgba(30,20,50,.55); z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px; }
   #tech .box, #copybox .box { background: #fff; border-radius: 22px; padding: 20px; width: 100%; max-width: 640px; max-height: 92vh; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
   #tech h2, #copybox h2 { margin: 0; }
@@ -115,7 +118,7 @@
 
 <section id="login" hidden>
   <h1>Yoto Library Check 🎵</h1>
-  <p>Lists every playlist in your Yoto family library with the date it was last changed, and checks a recording of a player's download list to show what is missing or out of date.</p>
+  <p>Finds the playlists that haven't downloaded to your Yoto player, or downloaded before their latest revision, so you know what won't play without Wi-Fi. You record the player's download list in the Yoto app, and this page reads it on your device.</p>
   <button id="loginBtn" class="primary">Sign in with Yoto</button>
   <p id="loginErr" class="err" hidden></p>
   <p style="font-size:.9rem">🔒 You sign in on Yoto's own website. This page can only view; it cannot change anything in your account.</p>
@@ -139,47 +142,8 @@
     <h1>Library Check</h1>
     <button id="techBtn" class="btn">Tech info</button>
   </header>
-  <div class="tabs">
-    <button class="chip on" data-view="lib">Library</button>
-    <button class="chip" data-view="check">Check a player</button>
-  </div>
 
-  <div id="view-lib">
-    <p id="stats"></p>
-    <div class="controls">
-      <div class="row">
-        <input id="search" type="search" placeholder="Search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Search playlists">
-      </div>
-      <div class="row">
-        <button class="chip on" data-tab="all">All</button>
-        <button class="chip" data-tab="mine">My Cards</button>
-        <button class="chip" data-tab="club">Club</button>
-      </div>
-      <div class="row">
-        <label class="lbl" for="sortSel">Sort</label>
-        <select id="sortSel">
-          <option value="revNew">Last revised (newest)</option>
-          <option value="revOld">Last revised (oldest)</option>
-          <option value="az">A to Z</option>
-          <option value="added">Date added (newest)</option>
-        </select>
-      </div>
-      <div class="row">
-        <label class="lbl" for="since">Revised since</label>
-        <input id="since" type="date">
-        <button id="sinceClear" class="chip" hidden>Clear</button>
-      </div>
-      <div class="row">
-        <button id="csvBtn" class="btn">Download CSV</button>
-        <button id="copyBtn" class="btn">Copy list</button>
-        <button id="reloadBtn" class="btn">Reload</button>
-      </div>
-    </div>
-    <div id="msg" hidden></div>
-    <ul id="list"></ul>
-  </div>
-
-  <div id="view-check" hidden>
+  <div id="view-check">
     <div class="panel">
       <p><b>1.</b> In the Yoto app, open Settings → My Players → your player → Audio download status.</p>
       <p><b>2.</b> Start a screen recording, then scroll slowly down the whole list (about two seconds per screen) and stop the recording.</p>
@@ -193,8 +157,10 @@
         <input id="appCount" type="number" inputmode="numeric" min="0" placeholder="e.g. 307">
       </div>
       <input id="files" type="file" accept="video/*,image/*" multiple hidden>
+      <p id="libStatus" class="note" hidden></p>
       <div class="row">
-        <button id="pickBtn" class="primary small">Choose recording</button>
+        <button id="pickBtn" class="primary small" disabled>Choose recording</button>
+        <button id="retryBtn" class="btn" hidden>Try again</button>
         <button id="cancelBtn" class="btn danger" hidden>Stop</button>
         <button id="tapBtn" class="primary small" hidden>Tap to start reading</button>
       </div>
@@ -204,30 +170,30 @@
       </div>
     </div>
     <div id="checkMsg" class="err" hidden></div>
+    <div id="savedBar" class="row" hidden></div>
     <div id="results" hidden></div>
   </div>
+
+  <p class="note foot"><a href="privacy.html">Privacy</a> · <button id="signOut" class="linkbtn">Sign out</button></p>
 </div>
 
 <div id="tech" hidden>
   <div class="box">
     <h2>Tech info</h2>
-    <p>"Check players" asks Yoto what it will tell us about each player. Copy the result and paste it into the chat so I can see what is available.</p>
+    <p>If something isn't working, copy this and paste it to whoever is helping you. It doesn't include your password.</p>
     <div class="row">
-      <button class="btn" id="probeBtn">Check players</button>
       <button class="btn" id="copyDbg">Copy</button>
-      <button class="btn danger" id="signOut">Sign out</button>
       <button class="btn" id="techClose">Close</button>
     </div>
     <pre id="dbg"></pre>
   </div>
 </div>
-<p class="note" id="footer" style="text-align:center;margin:18px 0"><a href="privacy.html">Privacy</a></p>
 <div id="toast" hidden></div>
 
 <script>
 'use strict';
 
-const VERSION = 'v2.8: library index plus Check a player';
+const VERSION = 'v3.0: Check a player';
 
 // Optional anonymous visit counter (GoatCounter). Put your GoatCounter site code here, e.g. 'yoto-library-check'. Leave empty for no counter.
 const GOATCOUNTER_CODE = '';
@@ -256,8 +222,8 @@ const TIMING = { scriptMs: 30000, readerMs: 60000, openMs: 25000, seekMs: 10000,
 
 const $ = (id) => document.getElementById(id);
 const state = {
-  cards: [], tab: 'all', sort: 'revNew', since: '', query: '', libInfo: null, probe: null, loadError: null,
-  view: 'lib', devices: null, check: { running: false, cancel: false, result: null, diag: null }
+  cards: [], libInfo: null, loadError: null, libFresh: false, saved: {},
+  devices: null, check: { running: false, cancel: false, result: null, diag: null }
 };
 
 function el(tag, attrs = {}, ...kids) {
@@ -295,10 +261,6 @@ function niceIso(iso) {
   return m ? (+m[3]) + ' ' + MONTHS[+m[2] - 1] + ' ' + m[1] : 'unknown';
 }
 // Start of a yyyy-mm-dd day in local time (0 if blank or bad)
-function startOfDay(iso) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
-  return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : 0;
-}
 function tsOf(...vals) {
   for (const v of vals) { const t = typeof v === 'string' ? Date.parse(v) : NaN; if (t > 0) return t; }
   return 0;
@@ -339,44 +301,9 @@ function cardsFrom(items) {
   }
   return Array.from(byId.values());
 }
-function matchesQuery(card, query) {
-  const t = card.title.toLowerCase();
-  return query.split(/\s+/).filter(Boolean).every((w) => t.includes(w));
-}
-function filterCards(cards, tab, sinceIso, query) {
-  const from = startOfDay(sinceIso);
-  const q = (query || '').trim().toLowerCase();
-  return cards.filter((c) => (tab === 'all' || c.kind === tab)
-    && (!from || c.rev >= from)
-    && (!q || matchesQuery(c, q)));
-}
-function sortCards(list, mode) {
-  const az = (a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
-  const out = list.slice();
-  if (mode === 'revNew') out.sort((a, b) => (b.rev - a.rev) || az(a, b));
-  else if (mode === 'revOld') out.sort((a, b) => ((a.rev || Infinity) - (b.rev || Infinity)) || az(a, b));
-  else if (mode === 'added') out.sort((a, b) => (b.added - a.added) || az(a, b));
-  else out.sort(az);
-  return out;
-}
 function csvCell(v) {
   const s = String(v == null ? '' : v);
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-}
-function buildCsv(list) {
-  const lines = [['Title', 'Tab', 'Last revised', 'Date added', 'Card ID'].map(csvCell).join(',')];
-  for (const c of list) {
-    lines.push([c.title, c.kind === 'club' ? 'Club' : 'My Cards', isoDate(c.rev), isoDate(c.added), c.id].map(csvCell).join(','));
-  }
-  return lines.join('\n');
-}
-function summarise(all, shown, sinceIso) {
-  const mine = all.filter((c) => c.kind === 'mine').length;
-  const club = all.length - mine;
-  let s = all.length + ' playlists (' + mine + ' My Cards, ' + club + ' Club).';
-  if (shown.length !== all.length) s += ' Showing ' + shown.length + '.';
-  if (sinceIso) s += ' Revised since ' + niceDate(startOfDay(sinceIso)) + ': ' + shown.length + '.';
-  return s;
 }
 // </storage>
 
@@ -651,19 +578,10 @@ function showLogin(message) {
   const e = $('loginErr'); e.hidden = !message; e.textContent = message || '';
 }
 function showApp() { $('login').hidden = true; $('app').hidden = false; }
-function setMsg(text) { const m = $('msg'); m.hidden = !text; m.textContent = text || ''; }
 function toast(text) {
   const t = $('toast'); t.textContent = text; t.hidden = false;
   clearTimeout(toast.timer); toast.timer = setTimeout(() => { t.hidden = true; }, 2600);
 }
-function setView(v) {
-  state.view = v;
-  $('view-lib').hidden = v !== 'lib';
-  $('view-check').hidden = v !== 'check';
-  for (const b of document.querySelectorAll('.chip[data-view]')) b.classList.toggle('on', b.dataset.view === v);
-  if (v === 'check') loadDevices();
-}
-
 function placeholder(title) {
   const first = Array.from((title || '').trim())[0] || '♪';
   let sum = 0; for (const ch of title || '') sum += ch.charCodeAt(0);
@@ -681,33 +599,8 @@ function artFor(card) {
   return art;
 }
 
-function currentList() {
-  return sortCards(filterCards(state.cards, state.tab, state.since, state.query), state.sort);
-}
-function render() {
-  const shown = currentList();
-  $('stats').textContent = state.cards.length ? summarise(state.cards, shown, state.since) : '';
-  $('sinceClear').hidden = !state.since;
-  for (const b of document.querySelectorAll('.chip[data-tab]')) b.classList.toggle('on', b.dataset.tab === state.tab);
-  const list = $('list');
-  list.replaceChildren();
-  for (const c of shown) {
-    const meta = el('div', { class: 'm' });
-    meta.innerHTML = 'Revised <b></b> · Added <span></span>';
-    meta.querySelector('b').textContent = niceDate(c.rev);
-    meta.querySelector('span').textContent = niceDate(c.added);
-    const li = el('li', { class: 'item' }, artFor(c),
-      el('div', { class: 'txt' }, el('div', { class: 't' }, c.title), meta),
-      el('span', { class: 'tag' + (c.kind === 'club' ? ' club' : '') }, c.kind === 'club' ? 'CLUB' : 'MINE'));
-    list.append(li);
-  }
-  if (!state.cards.length) setMsg(state.loadError || 'Loading playlists…');
-  else setMsg(shown.length ? '' : 'Nothing matches.');
-}
-
 /* ---------- library ---------- */
 async function loadLibrary() {
-  if (!state.cards.length) setMsg('Loading playlists…');
   const fam = await api('/card/family/library?coverWidth=400&view=groups');
   const items = Array.isArray(fam.cards) ? fam.cards : [];
   state.cards = cardsFrom(items);
@@ -727,8 +620,9 @@ async function loadLibrary() {
     firstCardContentKeys: first && first.card && first.card.content ? Object.keys(first.card.content) : null
   };
   writeJson('lc_library', { at: Date.now(), cards: state.cards });
+  state.libFresh = true;
   showApp();
-  render();
+  updateLibStatus();
 }
 function loadCache() {
   const c = readJson('lc_library', null);
@@ -779,15 +673,56 @@ async function copyText(text, okMessage, btn) {
   if (ok) { toast(okMessage); flashButton(btn, 'Copied ✓'); } else showCopyBox(text);
   return ok;
 }
-function downloadCsv() {
-  const list = currentList();
-  if (!list.length) { toast('Nothing to export'); return; }
-  saveCsvFile(buildCsv(list), 'yoto-library-' + isoDate(Date.now()) + '.csv', list.length);
+/* ---------- library status (the library loads quietly in the background) ---------- */
+function updateLibStatus() {
+  const s = $('libStatus'), r = $('retryBtn');
+  const usable = state.libFresh || !!(state.loadError && state.cards.length);
+  if (state.libFresh) { s.hidden = true; r.hidden = true; }
+  else if (state.loadError) {
+    s.hidden = false; r.hidden = false;
+    s.textContent = state.loadError + (state.cards.length
+      ? ' Using the copy of your library saved on this device, which may be out of date.'
+      : ' The check needs your library, so it cannot start yet.');
+  } else { s.hidden = false; r.hidden = true; s.textContent = 'Loading your playlists…'; }
+  if (!state.check.running) $('pickBtn').disabled = !usable;
 }
-function copyList() {
-  const list = currentList();
-  if (!list.length) { toast('Nothing to copy'); return; }
-  copyText(buildCsv(list), 'Copied ' + list.length + ' rows', $('copyBtn'));
+
+/* ---------- saved results (kept on this device so they survive closing the app or signing in again) ---------- */
+const RESULT_VERSION = 1;
+function resultKey(r) { return r.deviceId || r.playerName || 'player'; }
+function slimResult(r) {
+  const cmp = Object.assign({}, r.cmp); delete cmp.present; delete cmp.same;
+  return Object.assign({}, r, { cmp, v: RESULT_VERSION });
+}
+function loadSaved() {
+  const s = readJson('lc_results', {});
+  state.saved = {};
+  if (s && typeof s === 'object' && !Array.isArray(s)) {
+    for (const [k, r] of Object.entries(s)) if (r && r.v === RESULT_VERSION && r.cmp && Array.isArray(r.cmp.missing)) state.saved[k] = r;
+  }
+}
+function rememberResult(r) {
+  state.saved[resultKey(r)] = slimResult(r);
+  writeJson('lc_results', state.saved);
+  renderSavedBar();
+}
+function savedKeys() { return Object.keys(state.saved).sort((a, b) => (state.saved[b].savedAt || 0) - (state.saved[a].savedAt || 0)); }
+function showSaved(key) {
+  state.check.result = state.saved[key];
+  renderResults(false);
+  renderSavedBar();
+}
+function renderSavedBar() {
+  const bar = $('savedBar'), keys = savedKeys();
+  if (keys.length < 2) { bar.hidden = true; bar.replaceChildren(); return; }
+  bar.replaceChildren();
+  for (const k of keys) {
+    const r = state.saved[k];
+    const b = el('button', { class: 'chip' + (state.check.result && resultKey(state.check.result) === k ? ' on' : '') }, (r.playerName || 'Player') + ' · ' + niceDate(r.savedAt));
+    b.addEventListener('click', () => showSaved(k));
+    bar.append(b);
+  }
+  bar.hidden = false;
 }
 
 /* ---------- check a player ---------- */
@@ -799,7 +734,9 @@ async function loadDevices() {
     state.devices = (Array.isArray(res.devices) ? res.devices : []).map((d) => ({ id: d.deviceId, name: d.name || 'Player', online: d.online }));
   } catch (e) {
     if (e.message === 'signin') { showLogin('Please sign in again.'); return; }
-    state.devices = [];
+    state.devices = null;  // not remembered, so Try again (or the next library load) can fetch the players again
+    sel.replaceChildren(el('option', { value: '' }, "Couldn't load players (green button playlists won't be checked)"));
+    return;
   }
   sel.replaceChildren(el('option', { value: '' }, state.devices.length ? 'Choose a player…' : "Couldn't load players (green button playlists won't be checked)"));
   for (const d of state.devices) sel.append(el('option', { value: d.id }, d.name));
@@ -993,7 +930,7 @@ function checkError(text) { const e = $('checkMsg'); e.hidden = !text; e.textCon
 async function runCheck(files) {
   const chk = state.check;
   if (chk.running) return;
-  if (!state.cards.length) { checkError('Your library has not loaded yet. Open the Library tab first.'); return; }
+  if (!state.cards.length) { checkError('Your library has not loaded yet. Please wait a moment, or tap Try again.'); return; }
   checkError('');
   chk.running = true; chk.cancel = false;
   $('results').hidden = true; $('results').replaceChildren();
@@ -1109,7 +1046,8 @@ async function runCheck(files) {
     const { found, unmatched } = matchEntries(entries, index, memo);
     const cmp = compareToLibrary(state.cards, found, shortcutIds);
     const credibleUnmatched = Array.from(unmatched.entries()).filter(([t, c]) => c >= 2 && t.length >= 6).sort((a, b) => b[1] - a[1]);
-    chk.result = { playerName, shortcutIds, cmp, found: found.size, unmatched: credibleUnmatched, appCount: parseInt($('appCount').value, 10) || 0 };
+    chk.result = { playerName, deviceId, shortcutIds, cmp, presentCount: cmp.present.length, total: state.cards.length, savedAt: Date.now(), found: found.size, unmatched: credibleUnmatched, appCount: parseInt($('appCount').value, 10) || 0 };
+    rememberResult(chk.result);
     diag.entries = entries.length;
     diag.matched = found.size;
     diag.shortcutIds = shortcutIds.length;
@@ -1123,7 +1061,8 @@ async function runCheck(files) {
   } finally {
     if (scheduler) { try { await scheduler.terminate(); } catch (e) {} }
     chk.running = false;
-    $('pickBtn').disabled = false; $('pickBtn').textContent = 'Choose recording'; $('cancelBtn').hidden = true; $('tapBtn').hidden = true;
+    $('pickBtn').textContent = 'Choose recording'; $('cancelBtn').hidden = true; $('tapBtn').hidden = true;
+    updateLibStatus();
     $('files').value = '';
   }
 }
@@ -1153,19 +1092,20 @@ function resultsCsv(r) {
   for (const c of r.cmp.streaming) add('Podcast or radio (streams, does not download)', c, '');
   return lines.join('\n');
 }
-function renderResults() {
+function renderResults(fresh = true) {
   const r = state.check.result;
   const box = $('results');
   box.replaceChildren();
   if (!r) { box.hidden = true; return; }
-  const cmp = r.cmp, total = state.cards.length - cmp.streaming.length;
+  const cmp = r.cmp, total = (r.total || state.cards.length) - cmp.streaming.length;
   const sum = el('div', { class: 'panel' });
   const who = r.playerName ? r.playerName + ' has' : 'This player has';
   const p = el('p', { class: 'summary' });
-  p.innerHTML = esc(who) + ' <span class="good">' + cmp.present.length + '</span> of your ' + total + ' playlists' + (cmp.streaming.length ? ' that can download' : '') + '. '
+  p.innerHTML = esc(who) + ' <span class="good">' + (r.presentCount != null ? r.presentCount : cmp.present.length) + '</span> of your ' + total + ' playlists' + (cmp.streaming.length ? ' that can download' : '') + '. '
     + '<span class="' + (cmp.missing.length ? 'bad' : 'good') + '">' + cmp.missing.length + ' missing</span>, '
     + '<span class="' + (cmp.stale.length ? 'bad' : 'good') + '">' + cmp.stale.length + ' out of date</span>.';
   sum.append(p);
+  if (r.savedAt) sum.append(el('p', { class: 'note' }, 'Checked ' + niceDate(r.savedAt) + ' at ' + new Date(r.savedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.'));
   if (r.appCount) {
     const seen = r.found + r.unmatched.length;
     const n = el('p', { class: 'note' });
@@ -1198,13 +1138,6 @@ function renderResults() {
   const miss = el('ul', { class: 'rows' });
   for (const c of cmp.missing) miss.append(resultRow(c, 'Revised <b>' + esc(niceDate(c.rev)) + '</b>' + '', c.kind === 'club' ? 'CLUB' : 'MINE', c.kind === 'club' ? 'club' : ''));
   box.append(section('Playlists missing/not actually downloaded to the player:', cmp.missing.length, cmp.missing.length > 0, cmp.missing.length ? miss : el('p', { class: 'note' }, 'Nothing is missing.')));
-  if (cmp.streaming.length) {
-    const st = el('ul', { class: 'rows' });
-    const scs = new Set(r.shortcutIds);
-    for (const c of cmp.streaming) st.append(resultRow(c, 'Streams from the internet' + (scs.has(c.id) ? ' · on a green button' : ''), 'STREAMS', ''));
-    box.append(section("Podcasts and radio stations (these stream, so they don't download to the player)", cmp.streaming.length, false,
-      el('div', {}, el('p', { class: 'note' }, "These are expected to be missing from the player's download list. They need Wi-Fi to play."), st)));
-  }
   const old = el('ul', { class: 'rows' });
   for (const x of cmp.stale) old.append(resultRow(x.card, 'Downloaded <b>' + esc(niceIso(x.downloaded)) + '</b> · revised <b>' + esc(niceIso(x.revised)) + '</b>', x.card.kind === 'club' ? 'CLUB' : 'MINE', x.card.kind === 'club' ? 'club' : ''));
   box.append(section("Playlists where the most recent revision hasn't downloaded to the player (meaning they won't play if not connected to Wi-Fi)", cmp.stale.length, cmp.stale.length > 0, cmp.stale.length ? old : el('p', { class: 'note' }, 'Nothing is out of date.')));
@@ -1214,81 +1147,47 @@ function renderResults() {
     box.append(section('Read from the recording but not in your library', r.unmatched.length, false,
       el('div', {}, el('p', { class: 'note' }, 'These could be playlists you have since removed from Yoto, or text that was misread.'), ul)));
   }
+  if (cmp.streaming.length) {
+    const st = el('ul', { class: 'rows' });
+    const scs = new Set(r.shortcutIds);
+    for (const c of cmp.streaming) st.append(resultRow(c, 'Streams from the internet' + (scs.has(c.id) ? ' · on a green button' : ''), 'STREAMS', ''));
+    box.append(section("Podcasts and radio stations (these stream, so they don't download to the player)", cmp.streaming.length, false,
+      el('div', {}, el('p', { class: 'note' }, "These are expected to be missing from the player's download list. They need Wi-Fi to play."), st)));
+  }
   box.hidden = false;
-  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (fresh) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-/* ---------- tech info + player probe ---------- */
-function cut(v, n) { const s = typeof v === 'string' ? v : JSON.stringify(v); return s && s.length > n ? s.slice(0, n) + '…[cut ' + (s.length - n) + ' more characters]' : s; }
+/* ---------- tech info ---------- */
 function techText() {
   return JSON.stringify({
     version: VERSION, callbackUsed: CONFIG.redirectUri, library: state.libInfo,
-    lastLoadError: state.loadError, players: state.probe, lastCheck: state.check.diag
+    lastLoadError: state.loadError, lastCheck: state.check.diag
   }, null, 2);
 }
 function openTech() { $('dbg').textContent = techText(); $('tech').hidden = false; }
-// Asks Yoto's player endpoints what they will say. Read-only (GET) calls only.
-async function probePlayers() {
-  $('probeBtn').disabled = true; $('dbg').textContent = 'Asking Yoto about your players…';
-  const out = { devicesList: null, players: [] };
-  try {
-    const res = await api('/device-v2/devices/mine');
-    const devices = Array.isArray(res.devices) ? res.devices : [];
-    out.devicesList = devices.map((d) => ({ name: d.name, id: d.deviceId, type: d.deviceType, family: d.deviceFamily, online: d.online, otherKeys: Object.keys(d) }));
-    for (const d of devices) {
-      const p = { name: d.name, calls: {} };
-      for (const path of ['config', 'status']) {
-        const label = '/device-v2/{id}/' + path;
-        try {
-          const data = await api('/device-v2/' + encodeURIComponent(d.deviceId) + '/' + path);
-          p.calls[label] = { ok: true, topKeys: data && typeof data === 'object' ? Object.keys(data) : typeof data, sample: cut(data, path === 'config' ? 5000 : 1500) };
-        } catch (e) {
-          if (e.message === 'signin') throw e;
-          p.calls[label] = { ok: false, status: e.status || null, error: e.message };
-        }
-      }
-      out.players.push(p);
-    }
-  } catch (e) {
-    if (e.message === 'signin') { $('tech').hidden = true; showLogin('Please sign in again.'); return; }
-    out.error = e.message;
-  }
-  state.probe = out;
-  $('probeBtn').disabled = false;
-  $('dbg').textContent = techText();
-}
-
 /* ---------- wire up ---------- */
 function handleLoadError(e) {
   if (e.message === 'signin') { showLogin('Please sign in again.'); return; }
   state.loadError = e instanceof TypeError ? 'Cannot reach Yoto right now. Check the connection.' : e.message;
   showApp();
-  if (state.cards.length) { setMsg(''); toast('Could not refresh: ' + state.loadError); return; }
-  render();
+  updateLibStatus();
 }
 function wire() {
   $('loginBtn').addEventListener('click', startLogin);
-  let timer = null;
-  $('search').addEventListener('input', (e) => { clearTimeout(timer); timer = setTimeout(() => { state.query = e.target.value; render(); }, 150); });
-  $('search').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
-  for (const b of document.querySelectorAll('.chip[data-tab]')) b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); });
-  for (const b of document.querySelectorAll('.chip[data-view]')) b.addEventListener('click', () => setView(b.dataset.view));
-  $('sortSel').addEventListener('change', (e) => { state.sort = e.target.value; store('lc_sort', state.sort); render(); });
-  $('since').addEventListener('change', (e) => { state.since = e.target.value; render(); });
-  $('sinceClear').addEventListener('click', () => { state.since = ''; $('since').value = ''; render(); });
-  $('csvBtn').addEventListener('click', downloadCsv);
-  $('copyBtn').addEventListener('click', copyList);
-  $('reloadBtn').addEventListener('click', async () => { toast('Reloading…'); try { await loadLibrary(); toast('Up to date'); } catch (e) { handleLoadError(e); } });
+  $('retryBtn').addEventListener('click', async () => { state.loadError = null; updateLibStatus(); loadDevices(); try { await loadLibrary(); } catch (e) { handleLoadError(e); } });
   $('pickBtn').addEventListener('click', () => $('files').click());
   $('files').addEventListener('change', (e) => { const f = Array.from(e.target.files || []); if (f.length) runCheck(f); });
   $('cancelBtn').addEventListener('click', () => { state.check.cancel = true; $('cancelBtn').hidden = true; setProgress('Stopping…', null); });
   $('techBtn').addEventListener('click', openTech);
   $('techClose').addEventListener('click', () => { $('tech').hidden = true; });
-  $('probeBtn').addEventListener('click', probePlayers);
   $('copyDbg').addEventListener('click', () => copyText($('dbg').textContent, 'Copied', $('copyDbg')));
   $('signOut').addEventListener('click', () => {
-    unstore('lc_tokens'); unstore('lc_library');
-    state.cards = []; state.devices = null; $('tech').hidden = true; showLogin();
+    if (!confirm('Sign out? This also clears your saved results from this device.')) return;
+    unstore('lc_tokens'); unstore('lc_library'); unstore('lc_results');
+    state.cards = []; state.devices = null; state.saved = {}; state.libFresh = false; state.loadError = null;
+    state.check.result = null; $('results').hidden = true; $('results').replaceChildren(); $('savedBar').hidden = true;
+    $('tech').hidden = true; showLogin();
   });
 }
 
@@ -1296,12 +1195,16 @@ function wire() {
   wire();
   try { await handleCallback(); } catch (e) { showLogin(e.message); return; }
   if (!getTokens()) { showLogin(); return; }
-  const sort = fetchStored('lc_sort');
-  if (['revNew', 'revOld', 'az', 'added'].includes(sort)) state.sort = sort;
-  $('sortSel').value = state.sort;
+  unstore('lc_sort');
+  loadSaved();
+  const latest = savedKeys()[0];
   const cached = loadCache();
-  if (cached.length) { state.cards = cached; showApp(); render(); }
-  try { await loadLibrary(); } catch (e) { handleLoadError(e); }
+  if (cached.length) state.cards = cached;
+  showApp();
+  updateLibStatus();
+  if (latest) showSaved(latest);
+  loadDevices();
+  try { await loadLibrary(); if (!state.devices) loadDevices(); } catch (e) { handleLoadError(e); }
 })();
 </script>
 </body>
