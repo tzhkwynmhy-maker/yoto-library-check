@@ -112,24 +112,35 @@
   #tech h2, #copybox h2 { margin: 0; }
   #tech p, #copybox p { margin: 0; color: var(--soft); line-height: 1.45; }
   #dbg { background: #f4f0fa; padding: 10px; border-radius: 10px; font-size: .72rem; overflow: auto; max-height: 45vh; white-space: pre-wrap; word-break: break-all; user-select: text; -webkit-user-select: text; margin: 0; }
+
+  .pick { width: 22px; height: 22px; flex: none; accent-color: var(--accent); }
+  .soft { color: var(--soft); } .good { color: var(--good); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; }
+  .tag.sent { background: #dcf1dc; color: var(--good); }
+  label.ck { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; line-height: 1.4; color: var(--ink); }
+  label.ck input { width: 22px; height: 22px; flex: none; margin-top: 1px; accent-color: var(--accent); }
+  #runbox { position: fixed; inset: 0; background: rgba(30,20,50,.6); z-index: 35; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #runbox .box { background: #fff; border-radius: 22px; padding: 20px; width: 100%; max-width: 560px; max-height: 92vh; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+  #runbox h2 { margin: 0; } #runbox p { margin: 0; line-height: 1.45; }
+  #rbCount { font-size: 2rem; font-weight: 800; }
+  #rbResults { white-space: pre-wrap; font-size: .92rem; color: var(--soft); margin: 0; }
 </style>
 </head>
 <body>
 
 <section id="login" hidden>
   <h1>Yoto Library Check 🎵</h1>
-  <p>Finds the playlists that haven't downloaded to your Yoto player, or downloaded before their latest revision, so you know what won't play without Wi-Fi. You record the player's download list in the Yoto app, and this page reads it on your device.</p>
+  <p>Finds the playlists that haven't downloaded to your Yoto player, or downloaded before their latest revision, so you know what won't play without Wi-Fi. You record the player's download list in the Yoto app, and this page reads it on your device. Then, if you like, it can send the missing ones to the player so they download.</p>
   <button id="loginBtn" class="primary">Sign in with Yoto</button>
   <p id="loginErr" class="err" hidden></p>
-  <p style="font-size:.9rem">🔒 You sign in on Yoto's own website. This page can only view; it cannot change anything in your account.</p>
+  <p style="font-size:.9rem">🔒 You sign in on Yoto's own website. This page can view your playlists and players, and start a playlist on your player when you tap Send. It cannot change settings or anything in your account.</p>
   <details style="font-size:.9rem;color:var(--soft)" open>
     <summary>What to expect when you sign in</summary>
     <p>Yoto will show a warning that it can't verify this app. That is normal for a small independent app that hasn't been through Yoto's review. Please check that:</p>
     <ul class="plain">
       <li>the address on the sign-in page is <b>login.yotoplay.com</b>;</li>
-      <li>the access listed is <b>view only</b>: your playlists, your players' settings, and staying signed in.</li>
+      <li>the access listed is: your playlists, your players, <b>controlling your players</b> (used only to start a playlist so the player downloads it), and staying signed in.</li>
     </ul>
-    <p>The app cannot play, change, add or delete anything. Your recordings never leave your device. <a href="privacy.html">Privacy details</a></p>
+    <p>It only ever sends start and stop to a player, and only when you tap Send. It never changes volume, sleep timers, Bluetooth or any setting, and cannot add or delete anything. Your recordings never leave your device. <a href="privacy.html">Privacy details</a></p>
   </details>
   <details style="font-size:.9rem;color:var(--soft)">
     <summary>Set-up note</summary>
@@ -188,12 +199,27 @@
     <pre id="dbg"></pre>
   </div>
 </div>
+<div id="runbox" hidden>
+  <div class="box">
+    <h2 id="rbTitle">Sending to the player</h2>
+    <p id="rbSeq" class="soft"></p>
+    <p id="rbCount"></p>
+    <p id="rbMsg" class="soft"></p>
+    <p id="rbMsg2" class="soft"></p>
+    <div class="row">
+      <button id="rbStop" class="btn danger" disabled>STOP NOW</button>
+      <button id="rbManual" class="btn" hidden>I paused it myself</button>
+    </div>
+    <p id="rbResults"></p>
+    <div class="row"><button id="rbClose" class="btn" hidden>Close</button></div>
+  </div>
+</div>
 <div id="toast" hidden></div>
 
 <script>
 'use strict';
 
-const VERSION = 'v3.0: Check a player';
+const VERSION = 'v4.0: Send to player';
 
 // Optional anonymous visit counter (GoatCounter). Put your GoatCounter site code here, e.g. 'yoto-library-check'. Leave empty for no counter.
 const GOATCOUNTER_CODE = '';
@@ -211,7 +237,8 @@ const CONFIG = {
   apiBase: 'https://api.yotoplay.com',
   audience: 'https://api.yotoplay.com',
   // View-only. Nothing here can change anything.
-  scope: 'user:content:view family:library:view family:devices:view offline_access',
+  // View your library and players, plus start/stop on a player (used only to send playlists so they download).
+  scope: 'user:content:view family:library:view family:devices:view family:devices:control offline_access',
   redirectUri: location.origin + location.pathname
 };
 // Text reader (Tesseract.js), loaded only when a recording is checked. Default worker, core and language paths are used.
@@ -222,7 +249,7 @@ const TIMING = { scriptMs: 30000, readerMs: 60000, openMs: 25000, seekMs: 10000,
 
 const $ = (id) => document.getElementById(id);
 const state = {
-  cards: [], libInfo: null, loadError: null, libFresh: false, saved: {},
+  cards: [], libInfo: null, loadError: null, libFresh: false, saved: {}, sel: new Set(), selFor: '', sent: {},
   devices: null, check: { running: false, cancel: false, result: null, diag: null }
 };
 
@@ -527,16 +554,18 @@ async function handleCallback() {
     })
   });
   if (!res.ok) throw new Error('Sign-in failed (code ' + res.status + ').');
-  saveTokens(await res.json(), null);
+  saveTokens(await res.json(), null, true);
 }
 
 /* ---------- tokens ---------- */
 function getTokens() { try { return JSON.parse(fetchStored('lc_tokens') || 'null'); } catch (e) { return null; } }
-function saveTokens(t, prev) {
+function saveTokens(t, prev, fresh) {
   store('lc_tokens', JSON.stringify({
     access_token: t.access_token,
     refresh_token: t.refresh_token || (prev && prev.refresh_token) || null,
-    exp: Date.now() + (t.expires_in || 600) * 1000
+    exp: Date.now() + (t.expires_in || 600) * 1000,
+    // does this sign-in include permission to control players? (a sign-in made before v4.0 does not)
+    ctl: typeof t.scope === 'string' ? /family:devices:control/.test(t.scope) : (fresh ? true : !!(prev && prev.ctl))
   }));
 }
 let refreshing = null;
@@ -702,6 +731,7 @@ function loadSaved() {
   }
 }
 function rememberResult(r) {
+  clearSent(r.deviceId);
   state.saved[resultKey(r)] = slimResult(r);
   writeJson('lc_results', state.saved);
   renderSavedBar();
@@ -1067,10 +1097,17 @@ async function runCheck(files) {
   }
 }
 
-function resultRow(card, metaHtml, tagText, tagClass) {
+function resultRow(card, metaHtml, tagText, tagClass, pickDevice) {
   const meta = el('div', { class: 'm' });
   meta.innerHTML = metaHtml;
   const li = el('li', { class: 'item' }, artFor(card), el('div', { class: 'txt' }, el('div', { class: 't' }, card.title), meta));
+  if (pickDevice) {
+    const cb = el('input', { type: 'checkbox', class: 'pick', 'aria-label': 'Select ' + card.title });
+    cb.dataset.id = card.id; cb.checked = state.sel.has(card.id);
+    li.prepend(cb);
+    const when = (state.sent[pickDevice] || {})[card.id];
+    if (when) { meta.innerHTML += ' · <b>sent to player ' + esc(niceDate(when)) + '</b>'; li.append(el('span', { class: 'tag sent' }, 'SENT')); return li; }
+  }
   if (tagText) li.append(el('span', { class: 'tag' + (tagClass ? ' ' + tagClass : '') }, tagText));
   return li;
 }
@@ -1097,6 +1134,8 @@ function renderResults(fresh = true) {
   const box = $('results');
   box.replaceChildren();
   if (!r) { box.hidden = true; return; }
+  const rk = resultKey(r) + '|' + (r.savedAt || 0);
+  if (state.selFor !== rk) { state.sel.clear(); state.selFor = rk; }
   const cmp = r.cmp, total = (r.total || state.cards.length) - cmp.streaming.length;
   const sum = el('div', { class: 'panel' });
   const who = r.playerName ? r.playerName + ' has' : 'This player has';
@@ -1126,6 +1165,8 @@ function renderResults(fresh = true) {
   row.append(bCopy, bCsv);
   sum.append(row);
   box.append(sum);
+  const sp = sendPanel(r);
+  if (sp) box.append(sp);
 
   const sc = cmp.shortcutMissing.length + cmp.shortcutStale.length;
   if (r.shortcutIds.length) {
@@ -1136,10 +1177,10 @@ function renderResults(fresh = true) {
     box.append(section("Green Button playlists that haven't actually downloaded to the player", sc, sc > 0, body));
   }
   const miss = el('ul', { class: 'rows' });
-  for (const c of cmp.missing) miss.append(resultRow(c, 'Revised <b>' + esc(niceDate(c.rev)) + '</b>' + '', c.kind === 'club' ? 'CLUB' : 'MINE', c.kind === 'club' ? 'club' : ''));
+  for (const c of cmp.missing) miss.append(resultRow(c, 'Revised <b>' + esc(niceDate(c.rev)) + '</b>' + '', c.kind === 'club' ? 'CLUB' : 'MINE', c.kind === 'club' ? 'club' : '', r.deviceId));
   box.append(section('Playlists missing/not actually downloaded to the player:', cmp.missing.length, cmp.missing.length > 0, cmp.missing.length ? miss : el('p', { class: 'note' }, 'Nothing is missing.')));
   const old = el('ul', { class: 'rows' });
-  for (const x of cmp.stale) old.append(resultRow(x.card, 'Downloaded <b>' + esc(niceIso(x.downloaded)) + '</b> · revised <b>' + esc(niceIso(x.revised)) + '</b>', x.card.kind === 'club' ? 'CLUB' : 'MINE', x.card.kind === 'club' ? 'club' : ''));
+  for (const x of cmp.stale) old.append(resultRow(x.card, 'Downloaded <b>' + esc(niceIso(x.downloaded)) + '</b> · revised <b>' + esc(niceIso(x.revised)) + '</b>', x.card.kind === 'club' ? 'CLUB' : 'MINE', x.card.kind === 'club' ? 'club' : '', r.deviceId));
   box.append(section("Playlists where the most recent revision hasn't downloaded to the player (meaning they won't play if not connected to Wi-Fi)", cmp.stale.length, cmp.stale.length > 0, cmp.stale.length ? old : el('p', { class: 'note' }, 'Nothing is out of date.')));
   if (r.unmatched.length) {
     const ul = el('ul', { class: 'plain' });
@@ -1155,14 +1196,336 @@ function renderResults(fresh = true) {
       el('div', {}, el('p', { class: 'note' }, "These are expected to be missing from the player's download list. They need Wi-Fi to play."), st)));
   }
   box.hidden = false;
+  updateSendPanel();
   if (fresh) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+
+/* ---------- send to player ---------- */
+// Starts a playlist on the player so it downloads it, exactly as inserting its card would, then stops it.
+// Only start, stop and "what are you doing?" messages are ever sent. Nothing else (volume, sleep timer, Bluetooth, restart) is ever sent.
+const SEND = { playSeconds: 20, stateWaitMs: 6000, extraWaitMs: 800, stopWaitMs: 3000, gapMs: 4000, max: 10 };
+const MQTT_URL = 'wss://aqrphjqbp3u2z-ats.iot.eu-west-2.amazonaws.com/mqtt';
+const MQTT_AUTHORIZER = 'PublicJWTAuthorizer';
+const MQTT_LIBS = ['https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js', 'https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js'];
+const tx = {
+  busy: false, pendingStop: false, cancel: false, client: null, connected: false, status: null, lastEvent: null, stateSeq: 0,
+  device: null, run: null, results: [], log: [], haltNote: '', countdown: null, timers: [], closeAfter: [], connectedAt: 0, errors: []
+};
+function txNote(what) { tx.log.push({ t: new Date().toISOString().slice(11, 19), what }); if (tx.log.length > 120) tx.log.shift(); }
+function hasControl() { const t = getTokens(); return !!(t && t.ctl); }
+function clearSent(deviceId) { if (deviceId && state.sent[deviceId]) { delete state.sent[deviceId]; writeJson('lc_sent', state.sent); } }
+function markSent(deviceId, cardId) { (state.sent[deviceId] = state.sent[deviceId] || {})[cardId] = Date.now(); writeJson('lc_sent', state.sent); }
+
+// Reasons not to start. Empty list = the player looks idle.
+function stateProblems(device, status, event) {
+  const out = [];
+  if (!device) { out.push('Choose a player first.'); return out; }
+  if (device.online === false) out.push('The player says it is offline. Switch it on and check its Wi-Fi.');
+  if (!status && !event) { out.push("The player did not say what it is doing, so this page can't tell it is idle. Press a button on it to wake it, then try again."); return out; }
+  const playing = (status && String(status.playingStatus || '').toLowerCase() === 'playing') || (event && String(event.playbackStatus || '').toLowerCase() === 'playing');
+  if (playing) out.push('The player is playing something right now. Pause it first.');
+  if (status && status.cardInserted === true) out.push('There is a card in the player. Take it out first.');
+  if (event && event.cardId && String(event.cardId).toLowerCase() !== 'none') out.push('The player has a card loaded. Stop it and take any card out first.');
+  return out;
+}
+function loadMqttScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    const timer = setTimeout(() => reject(new Error('timeout loading ' + src)), 15000);
+    s.src = src;
+    s.onload = () => { clearTimeout(timer); resolve(); };
+    s.onerror = () => { clearTimeout(timer); reject(new Error('could not load ' + src)); };
+    document.head.append(s);
+  });
+}
+async function ensureMqttLib() {
+  if (window.mqtt) return;
+  const errs = [];
+  for (const u of MQTT_LIBS) { try { await loadMqttScript(u); if (window.mqtt) return; } catch (e) { errs.push(e.message); } }
+  throw new Error("Couldn't load the connection tool. It needs an internet connection. " + errs.join('; '));
+}
+function txTopic(kind) { return 'device/' + tx.device.id + '/' + kind; }
+function txTryConnect(label, url, token) {
+  return new Promise((resolve, reject) => {
+    let done = false, client;
+    const finish = (err) => {
+      if (done) return; done = true; clearTimeout(timer);
+      if (err) { tx.errors.push(label + ': ' + err); try { client.end(true); } catch (e) {} reject(new Error(err)); }
+      else resolve(client);
+    };
+    const timer = setTimeout(() => finish('no answer after 15 seconds'), 15000);
+    try {
+      client = window.mqtt.connect(url, {
+        keepalive: 300, protocol: 'wss', reconnectPeriod: 0, clientId: 'DASH' + tx.device.id,
+        username: tx.device.id + '?x-amz-customauthorizer-name=' + MQTT_AUTHORIZER, password: token
+      });
+    } catch (e) { finish(String(e && e.message || e)); return; }
+    client.on('connect', () => finish());
+    client.on('error', (e) => finish(String(e && e.message || e)));
+    client.on('close', () => finish('connection closed straight away'));
+  });
+}
+function txClose() {
+  const old = tx.client; tx.client = null; tx.connected = false;
+  if (old) { try { old.end(true); } catch (e) {} }
+}
+// A brand-new connection. Yoto's connections close by themselves after a few seconds, so one is opened whenever one is needed.
+async function txOpen() {
+  let t = getTokens();
+  if (!t || !t.access_token) throw new Error('signin');
+  if (Date.now() > t.exp - 90000) t = await refreshTokens();
+  await ensureMqttLib();
+  txClose();
+  tx.status = null; tx.lastEvent = null; tx.errors = [];
+  let client = null, via = '';
+  for (const [label, url] of [['as Yoto documents it', MQTT_URL], ['with the authorizer in the address', MQTT_URL + '?x-amz-customauthorizer-name=' + MQTT_AUTHORIZER]]) {
+    try { client = await txTryConnect(label, url, t.access_token); via = label; break; } catch (e) { txNote('connect failed ' + label + ': ' + e.message); }
+  }
+  if (!client) throw new Error("Couldn't connect to Yoto's player server. " + tx.errors.join(' | '));
+  tx.client = client; tx.connected = true; tx.connectedAt = Date.now();
+  client.on('message', txOnMessage);
+  client.on('close', () => txOnClosed(client));
+  client.on('error', (e) => txNote('mqtt error: ' + (e && e.message || e)));
+  const sub = new Promise((res, rej) => client.subscribe([txTopic('data/events'), txTopic('data/status'), txTopic('response')], (err) => (err ? rej(err) : res())));
+  await Promise.race([sub, sleep(8000).then(() => { throw new Error('subscribing timed out'); })]);
+  txNote('connected ' + via);
+  return client;
+}
+async function txAskState(waitMs) {
+  const before = tx.stateSeq;
+  try {
+    tx.client.publish(txTopic('command/events/request'), '{}');
+    tx.client.publish(txTopic('command/status/request'), '');
+  } catch (e) { txNote('could not ask: ' + e.message); }
+  const t0 = Date.now();
+  while (tx.stateSeq === before && Date.now() - t0 < waitMs && tx.connected) await sleep(100);
+  if (tx.stateSeq > before) await sleep(SEND.extraWaitMs);
+  return { status: tx.status, event: tx.lastEvent };
+}
+function txOnMessage(tp, buf) {
+  let p; try { p = JSON.parse(buf.toString()); } catch (e) { return; }
+  const kind = tp.split('/').slice(2).join('/');
+  txNote('message on ' + kind + ': ' + buf.toString().slice(0, 200));
+  if (kind === 'data/status' && p.status) { tx.status = p.status; tx.stateSeq++; }
+  else if (kind === 'response' && p.status) {
+    const key = Object.keys(p.status).find((k) => k !== 'req_body');
+    const val = key && p.status[key];
+    if (key && key.indexOf('card') === 0 && tx.run) {
+      // The real player says "card-play" and "card-stop" (Yoto's docs say "card"), so accept both.
+      let what = '';
+      if (key === 'card-play') what = 'start'; else if (key === 'card-stop') what = 'stop';
+      else if (key === 'card') { try { what = JSON.parse(p.status.req_body || '{}').uri ? 'start' : 'stop'; } catch (e) {} }
+      if (what === 'start') { tx.run.startReply = val; rbPaintStart(); } else if (what === 'stop') tx.run.stopReply = val;
+    }
+  } else if (kind === 'data/events') {
+    tx.lastEvent = p; tx.stateSeq++;
+    if (tx.run && p.playbackStatus === 'playing') tx.run.sawPlaying = true;
+  }
+}
+function txOnClosed(c) {
+  if (c !== tx.client) return;
+  const secs = Number(((Date.now() - (tx.connectedAt || Date.now())) / 1000).toFixed(1));
+  tx.connected = false; tx.closeAfter.push(secs);
+  txNote('connection closed by itself after ' + secs + 's');
+}
+
+/* run box helpers */
+function rbMsg(cls, text) { const e = $('rbMsg'); e.className = cls; e.textContent = text; }
+function rbMsg2(cls, text) { const e = $('rbMsg2'); e.className = cls; e.textContent = text; }
+function rbPaintStart() {
+  const r = tx.run; if (!r) return;
+  if (r.startReply === 'OK') rbMsg('good', 'The player accepted the start command.');
+  else if (r.startReply === 'FAIL') rbMsg('err', 'The player replied FAIL. It did not start the playlist.');
+}
+function txClear() { for (const t of tx.timers) clearTimeout(t); tx.timers = []; clearInterval(tx.countdown); tx.countdown = null; }
+
+// One playlist: fresh connection, idle check, start, wait, then Stop. Resolves 'stopped', 'aborted' or 'unconfirmed'.
+async function runOne(card, idx, total) {
+  const run = { title: card.title, cardId: card.id, started: 0, stopped: false, stopping: false, stopConfirmed: false, manualStop: false, startReply: null, stopReply: null, sawPlaying: false, aborted: '', signin: false };
+  run.done = new Promise((res) => { run.finish = (r) => { if (!run.finished) { run.finished = true; res(r); } }; });
+  tx.run = run; tx.results.push(run);
+  $('rbSeq').textContent = 'Playlist ' + idx + ' of ' + total + ': ' + card.title;
+  $('rbStop').disabled = true; $('rbStop').textContent = 'STOP NOW'; $('rbManual').hidden = true;
+  $('rbCount').textContent = 'Checking…'; rbMsg('soft', 'Connecting and checking that the player is idle. Nothing has been started yet.'); rbMsg2('soft', '');
+  let proceed = false;
+  try {
+    await txOpen();
+    const st = await txAskState(SEND.stateWaitMs);
+    const probs = stateProblems(tx.device, st.status, st.event);
+    if (probs.length) run.aborted = 'Not started. ' + probs.join(' ');
+    else if (!tx.connected || !tx.client) run.aborted = 'Not started: the connection closed before the playlist could be started. Nothing was played.';
+    else proceed = true;
+  } catch (e) {
+    run.signin = e.message === 'signin';
+    run.aborted = run.signin ? 'Not started: your sign-in has run out. Sign in again.' : 'Not started: ' + (e.message || String(e));
+  }
+  if (!proceed) { rbMsg('err', run.aborted); $('rbCount').textContent = 'Not started'; txClose(); return 'aborted'; }
+  run.started = Date.now();
+  txNote('sending card/start (' + card.id + ')');
+  tx.client.publish(txTopic('command/card/start'), JSON.stringify({ uri: 'https://yoto.io/' + run.cardId }), { qos: 1 });
+  rbMsg('soft', 'Start sent. Waiting for the player…');
+  $('rbStop').disabled = false;
+  let left = SEND.playSeconds;
+  $('rbCount').textContent = left + 's';
+  tx.countdown = setInterval(() => { left = Math.max(0, left - 1); if (!run.stopping) $('rbCount').textContent = left + 's'; }, 1000);
+  tx.timers.push(setTimeout(() => stopSequence('timer'), SEND.playSeconds * 1000));
+  rbPaintStart();
+  return run.done;
+}
+// Sends Stop and waits for the player to confirm it. Reconnects if needed. Never assumes it worked.
+async function stopSequence(why) {
+  const run = tx.run;
+  if (!run || !run.started || run.stopping || run.stopped) return;
+  run.stopping = true; tx.pendingStop = true;
+  clearInterval(tx.countdown); tx.countdown = null;
+  $('rbCount').textContent = 'Stopping…'; $('rbStop').disabled = true; $('rbManual').hidden = true; rbMsg2('soft', 'Sending Stop…');
+  let confirmed = false;
+  for (let attempt = 1; attempt <= 4 && !confirmed; attempt++) {
+    try {
+      if (!tx.client || !tx.connected) { txNote('reconnecting to send stop (attempt ' + attempt + ')'); await txOpen(); }
+      run.stopReply = null;
+      tx.client.publish(txTopic('command/card/stop'), '{}', { qos: 1 });
+      txNote('sent card/stop (' + why + ', attempt ' + attempt + ')');
+      const t0 = Date.now();
+      while (run.stopReply == null && tx.connected && Date.now() - t0 < SEND.stopWaitMs) await sleep(100);
+      if (run.stopReply === 'OK') confirmed = true;
+    } catch (e) { txNote('stop attempt failed: ' + (e.message || e)); await sleep(500); }
+  }
+  run.stopping = false;
+  if (confirmed) {
+    run.stopped = true; run.stopConfirmed = true; tx.pendingStop = false;
+    $('rbCount').textContent = 'Stopped'; $('rbStop').textContent = 'Stopped'; rbMsg2('good', 'The player confirmed Stop.');
+    txClose(); run.finish('stopped');
+  } else {
+    $('rbCount').textContent = 'NOT CONFIRMED'; $('rbStop').disabled = false; $('rbStop').textContent = 'Try Stop again'; $('rbManual').hidden = false;
+    rbMsg2('err', "Couldn't confirm that the player stopped. Pause it with its own button now, then press \"I paused it myself\".");
+    run.finish('unconfirmed');
+  }
+  if (!tx.busy) finishUi();
+}
+function manualStopped() {
+  const r = tx.run; if (!r) return;
+  r.stopped = true; r.manualStop = true; tx.pendingStop = false;
+  $('rbManual').hidden = true; $('rbStop').disabled = true; $('rbCount').textContent = 'Stopped by hand';
+  rbMsg2('soft', 'Noted that you paused it yourself.'); txClose();
+  if (!tx.busy) finishUi();
+}
+function txReport() {
+  return tx.results.map((r) => ({ title: r.title, id: r.cardId, startReply: r.startReply, stopReply: r.stopReply, stopConfirmed: !!r.stopConfirmed, manualStop: !!r.manualStop, sawPlayingEvent: r.sawPlaying, notStarted: r.started ? null : (r.aborted || 'not started') }));
+}
+function wentThrough(r) { return r.started && (r.startReply === 'OK' || r.sawPlaying) && r.startReply !== 'FAIL' && (r.stopConfirmed || r.manualStop); }
+function finishUi() {
+  const dev = tx.device;
+  const lines = tx.results.map((r, i) => {
+    let t;
+    if (!r.started) t = r.aborted || 'Not started.';
+    else if (r.startReply === 'FAIL') t = 'The player refused to start it.';
+    else if (r.startReply === 'OK' || r.sawPlaying) t = 'Sent to the player.' + (r.stopConfirmed ? '' : (r.manualStop ? ' You paused it by hand.' : ' Stop was not confirmed.'));
+    else t = 'The player did not clearly confirm the start, so it may not have started.';
+    return (i + 1) + '. ' + r.title + ': ' + t;
+  });
+  $('rbResults').textContent = lines.join('\n') + (tx.haltNote ? '\n\n' + tx.haltNote : '')
+    + "\n\nThis page can't see download progress. Check the Yoto app's Audio download status, or do a new recording check later.";
+  if (dev) for (const r of tx.results) if (wentThrough(r)) { markSent(dev.id, r.cardId); state.sel.delete(r.cardId); }
+  $('rbTitle').textContent = 'Finished';
+  $('rbClose').hidden = tx.pendingStop;
+  renderResults(false);
+}
+
+/* send panel (inside the results) */
+function orderedSendable(r) {
+  const seen = new Set(), out = [];
+  for (const c of [].concat(r.cmp.missing, r.cmp.stale.map((x) => x.card))) if (!seen.has(c.id)) { seen.add(c.id); out.push(c); }
+  return out;
+}
+function selectedCards(r) {
+  const sent = state.sent[r.deviceId] || {};
+  return orderedSendable(r).filter((c) => state.sel.has(c.id) && !sent[c.id]);
+}
+function sendPanel(r) {
+  const cmp = r.cmp;
+  if (!cmp.missing.length && !cmp.stale.length) return null;
+  const panel = el('div', { class: 'panel', id: 'sendPanel' });
+  if (!r.deviceId) {
+    panel.append(el('p', { class: 'summary' }, 'Send to a player'),
+      el('p', { class: 'note' }, 'To send playlists to a player, choose the player in the "Which player?" box above before you check.'));
+    return panel;
+  }
+  const name = r.playerName || 'the player';
+  panel.append(el('p', { class: 'summary' }, 'Send to ' + name),
+    el('p', { class: 'note' }, 'Tick the missing or out-of-date playlists below, then send them. Each one is started on the player for ' + SEND.playSeconds + ' seconds so it downloads, then stopped (about 25 seconds each, up to ' + SEND.max + ' at a time). Keep this page open while it runs.'));
+  const row = el('div', { class: 'row' });
+  const mk = (label, fn) => { const b = el('button', { class: 'btn' }, label); b.addEventListener('click', () => { fn(); syncPicks(); updateSendPanel(); }); return b; };
+  const sent = state.sent[r.deviceId] || {};
+  row.append(
+    mk('Tick all missing', () => { for (const c of cmp.missing) if (!sent[c.id]) state.sel.add(c.id); }),
+    mk('Tick all out of date', () => { for (const x of cmp.stale) if (!sent[x.card.id]) state.sel.add(x.card.id); }),
+    mk('Clear', () => state.sel.clear()));
+  panel.append(row, el('p', { class: 'note', id: 'sendInfo' }));
+  const l1 = el('label', { class: 'ck' }, el('input', { type: 'checkbox', id: 'sendCk1' }), el('span', {}, 'The player is plugged in, showing red numbers, nothing is playing, and nobody is using it.'));
+  const l2 = el('label', { class: 'ck' }, el('input', { type: 'checkbox', id: 'sendCk2' }), el('span', {}, "I've checked the player's volume is turned to a level I'm happy for it to play at right now."));
+  const btn = el('button', { class: 'primary small', id: 'sendBtn' }, 'Send');
+  btn.addEventListener('click', sendSelected);
+  panel.append(l1, l2, el('div', { class: 'row' }, btn), el('p', { class: 'note', id: 'sendWhy' }));
+  return panel;
+}
+function syncPicks() { for (const cb of document.querySelectorAll('#results .pick')) cb.checked = state.sel.has(cb.dataset.id); }
+function updateSendPanel() {
+  const btn = $('sendBtn'); if (!btn) return;
+  const r = state.check.result; if (!r) return;
+  const all = selectedCards(r), n = Math.min(all.length, SEND.max);
+  $('sendInfo').textContent = all.length ? all.length + ' ticked' + (all.length > SEND.max ? '. Only the first ' + SEND.max + ' (in list order) go this time; the rest stay ticked for next time.' : '.') : 'Nothing ticked yet.';
+  const boxes = $('sendCk1').checked && $('sendCk2').checked;
+  btn.textContent = n > 1 ? 'Send ' + n + ' playlists' : 'Send';
+  let why = '';
+  if (tx.busy || tx.pendingStop) why = 'A send is in progress.';
+  else if (!hasControl()) why = 'This sign-in was made before sending was added. Tap "Sign in again" below to allow it.';
+  else if (!n) why = 'Tick at least one playlist.';
+  else if (!boxes) why = 'Tick both boxes above.';
+  btn.disabled = !!why;
+  const w = $('sendWhy'); w.textContent = why;
+  if (!hasControl()) {
+    if (!$('reSign')) { const b = el('button', { class: 'btn', id: 'reSign' }, 'Sign in again'); b.addEventListener('click', startLogin); w.after(b); }
+  } else if ($('reSign')) $('reSign').remove();
+}
+async function sendSelected() {
+  if (tx.busy || tx.pendingStop) return;
+  const r = state.check.result;
+  if (!r || !r.deviceId || !hasControl()) { updateSendPanel(); return; }
+  const cards = selectedCards(r).slice(0, SEND.max), n = cards.length;
+  if (!n) return;
+  const d = (state.devices || []).find((x) => x.id === r.deviceId);
+  const dev = { id: r.deviceId, name: r.playerName || (d && d.name) || 'Player', online: d ? d.online : undefined };
+  const list = cards.map((c, i) => (n > 1 ? (i + 1) + '. ' : '') + c.title).join('\n');
+  if (!window.confirm('Send to "' + dev.name + '":\n\n' + list + '\n\nEach plays for ' + SEND.playSeconds + ' seconds, then is stopped' + (n > 1 ? ' before the next one starts.' : '.') + ' Keep this page open.')) return;
+  tx.busy = true; tx.cancel = false; tx.results = []; tx.haltNote = ''; tx.device = dev; tx.run = null;
+  $('rbTitle').textContent = 'Sending to ' + dev.name; $('rbResults').textContent = ''; $('rbClose').hidden = true; $('runbox').hidden = false;
+  for (const id of ['sendCk1', 'sendCk2']) { const b = $(id); if (b) b.checked = false; }   // confirm again before the next send
+  updateSendPanel();
+  try {
+    for (let i = 0; i < n; i++) {
+      const res = await runOne(cards[i], i + 1, n);
+      if (res !== 'stopped') {
+        tx.haltNote = res === 'aborted' ? 'Stopped early because "' + cards[i].title + '" was not started' + (i + 1 < n ? ', so the rest were not started either.' : '.')
+          : 'Stopped early because Stop could not be confirmed for "' + cards[i].title + '".';
+        if (res === 'aborted' && tx.run && tx.run.signin) showLogin('Please sign in again.');
+        break;
+      }
+      if (tx.cancel) { tx.haltNote = 'You stopped the run, so the rest were not started.'; break; }
+      if (i < n - 1) { $('rbCount').textContent = 'Next soon…'; rbMsg2('soft', ''); await sleep(SEND.gapMs); }
+    }
+  } catch (e) { tx.haltNote = 'Something went wrong: ' + (e.message || e); }
+  tx.busy = false; txClear();
+  finishUi();
 }
 
 /* ---------- tech info ---------- */
 function techText() {
   return JSON.stringify({
     version: VERSION, callbackUsed: CONFIG.redirectUri, library: state.libInfo,
-    lastLoadError: state.loadError, lastCheck: state.check.diag
+    lastLoadError: state.loadError, lastCheck: state.check.diag,
+    send: { hasControl: hasControl(), connectionLifetimesSeconds: tx.closeAfter, results: txReport(), log: tx.log }
   }, null, 2);
 }
 function openTech() { $('dbg').textContent = techText(); $('tech').hidden = false; }
@@ -1180,12 +1543,21 @@ function wire() {
   $('files').addEventListener('change', (e) => { const f = Array.from(e.target.files || []); if (f.length) runCheck(f); });
   $('cancelBtn').addEventListener('click', () => { state.check.cancel = true; $('cancelBtn').hidden = true; setProgress('Stopping…', null); });
   $('techBtn').addEventListener('click', openTech);
+  $('results').addEventListener('change', (e) => {
+    const t = e.target;
+    if (t && t.classList && t.classList.contains('pick')) { if (t.checked) state.sel.add(t.dataset.id); else state.sel.delete(t.dataset.id); updateSendPanel(); }
+    else if (t && (t.id === 'sendCk1' || t.id === 'sendCk2')) updateSendPanel();
+  });
+  $('rbStop').addEventListener('click', () => { tx.cancel = true; stopSequence('button'); });
+  $('rbManual').addEventListener('click', manualStopped);
+  $('rbClose').addEventListener('click', () => { $('runbox').hidden = true; });
+  window.addEventListener('beforeunload', (e) => { if (tx.busy || tx.pendingStop) { e.preventDefault(); e.returnValue = ''; } });
   $('techClose').addEventListener('click', () => { $('tech').hidden = true; });
   $('copyDbg').addEventListener('click', () => copyText($('dbg').textContent, 'Copied', $('copyDbg')));
   $('signOut').addEventListener('click', () => {
     if (!confirm('Sign out? This also clears your saved results from this device.')) return;
-    unstore('lc_tokens'); unstore('lc_library'); unstore('lc_results');
-    state.cards = []; state.devices = null; state.saved = {}; state.libFresh = false; state.loadError = null;
+    unstore('lc_tokens'); unstore('lc_library'); unstore('lc_results'); unstore('lc_sent');
+    state.cards = []; state.devices = null; state.saved = {}; state.sent = {}; state.sel.clear(); state.libFresh = false; state.loadError = null;
     state.check.result = null; $('results').hidden = true; $('results').replaceChildren(); $('savedBar').hidden = true;
     $('tech').hidden = true; showLogin();
   });
@@ -1196,6 +1568,7 @@ function wire() {
   try { await handleCallback(); } catch (e) { showLogin(e.message); return; }
   if (!getTokens()) { showLogin(); return; }
   unstore('lc_sort');
+  state.sent = readJson('lc_sent', {});
   loadSaved();
   const latest = savedKeys()[0];
   const cached = loadCache();

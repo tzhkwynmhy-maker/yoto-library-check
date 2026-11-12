@@ -24,7 +24,7 @@
 <body>
 <main>
   <h1>Privacy: Yoto Library Check</h1>
-  <p class="soft">Last updated 8 November 2026. <a href="./">Back to the app</a></p>
+  <p class="soft">Last updated 12 November 2026. <a href="./">Back to the app</a></p>
 
   <p>Yoto Library Check is a small independent hobby project. It is not made by, or connected to, Yoto. This page says what the app does with your information, in plain words.</p>
 
@@ -32,20 +32,24 @@
   <ul>
     <li>The app has no server and no database. I (the developer) never receive your playlists, your account details or your recordings.</li>
     <li>Everything happens in your own browser.</li>
-    <li>The app can only <b>view</b> things in your Yoto account. It cannot play, change, add or delete anything.</li>
+    <li>The app can <b>view</b> your playlists and players. It can also <b>start and stop a playlist on your player</b>, but only when you tap Send, so the player downloads it. It never changes settings (volume, sleep timers, Bluetooth, restart) and cannot add or delete anything.</li>
   </ul>
 
   <h2>What the app asks Yoto for</h2>
-  <p>When you sign in, Yoto asks you to allow view-only access to:</p>
+  <p>When you sign in, Yoto asks you to allow access to:</p>
   <ul>
     <li>your family library: playlist titles, cover images, card IDs and the dates they were added and last revised;</li>
     <li>your players: their names and shortcut (green button) settings;</li>
+    <li>controlling your players: this is used only to start a playlist on a player you choose (so it downloads, the same as inserting its card) and then stop it, and to ask the player whether it is idle. It is used only when you tap Send;</li>
     <li>staying signed in, so you don't have to sign in again each visit.</li>
   </ul>
   <p>You type your Yoto password only on Yoto's own sign-in page (login.yotoplay.com), never in this app. The app talks to Yoto directly from your browser.</p>
 
+  <h2>Sending playlists to a player</h2>
+  <p>When you tap Send, your browser connects directly to Yoto's player service and sends start and stop messages for the playlists you ticked, one at a time, to the player you chose. Nothing passes through any server of mine. The app only starts a playlist when the player reports that it is idle, and it stops each one after about 20 seconds. The app can't see download progress, so it marks playlists as "sent" on your device only.</p>
+
   <h2>What is saved on your device</h2>
-  <p>The app saves a few things in your browser's local storage, only on your device: your sign-in tokens, a copy of your library list (so it opens quickly), and your chosen sort order. Using <b>Sign out</b> (in Tech info) removes the tokens and the library copy. Clearing the site's data in your browser removes everything.</p>
+  <p>The app saves a few things in your browser's local storage, only on your device: your sign-in tokens, a copy of your library list (so it opens quickly), your latest check result for each player, and which playlists you have sent to which player. Using <b>Sign out</b> (in Tech info) removes the tokens, the library copy, saved results and the sent marks. Clearing the site's data in your browser removes everything.</p>
 
   <h2>Your recordings and screenshots</h2>
   <p>When you use "Check a player", the video or screenshots you pick are read on your device by a text-reading tool. They are not uploaded anywhere, and the app does not keep them after the check finishes.</p>
@@ -53,7 +57,7 @@
   <h2>Other services involved</h2>
   <ul>
     <li><b>Yoto</b> (login.yotoplay.com and api.yotoplay.com) handles sign-in and supplies your library. Yoto's own privacy policy applies to that.</li>
-    <li><b>jsDelivr</b> (cdn.jsdelivr.net) supplies the text-reading tool (Tesseract.js) and its English language data when you run a check. Like any website, it can see technical details such as your IP address when your browser asks for those files. No account information is sent.</li>
+    <li><b>jsDelivr</b> (cdn.jsdelivr.net) supplies the text-reading tool (Tesseract.js) and its English language data when you run a check, and the MQTT connection tool when you send playlists (with unpkg.com as a backup). Like any website, it can see technical details such as your IP address when your browser asks for those files. No account information is sent.</li>
     <li><b>GitHub Pages</b> hosts this app. GitHub may keep ordinary web-server logs under its own privacy statement.</li>
   </ul>
 
